@@ -1,0 +1,15 @@
+[actions.screenshot]
+type = "command"
+command = "gnome-screenshot -a"
+
+[actions.fullscreen]
+type = "command"
+command = "gnome-screenshot"
+
+[bindings.gesture_button]
+trigger = "BTN_EXTRA"
+action = "screenshot"
+
+[bindings.thumb_button]
+trigger = "BTN_SIDE"
+action = "fullscreen"
