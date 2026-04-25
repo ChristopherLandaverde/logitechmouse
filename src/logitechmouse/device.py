@@ -89,3 +89,15 @@ class EvdevBackend:
         raise DeviceNotFoundError(
             f"no input device matched {criterion}; try `logitechmouse devices`"
         )
+
+    def read_loop(self, device: InputDevice) -> Iterator[InputEvent]:
+        """Yield InputEvent for every key-down on `device`. Blocking."""
+        for event in device.read_loop():
+            if event.type != ecodes.EV_KEY:
+                continue
+            if event.value != 1:
+                continue
+            key_event = categorize(event)
+            keycode = key_event.keycode
+            name = keycode[0] if isinstance(keycode, list) else keycode
+            yield InputEvent(trigger=name)
