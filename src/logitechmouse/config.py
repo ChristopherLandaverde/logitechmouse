@@ -8,6 +8,8 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib
 
+from evdev import ecodes
+
 
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "logitechmouse" / "config.toml"
 
@@ -70,3 +72,18 @@ def load_config(path: Path | None = None) -> AppConfig:
     )
 
     return AppConfig(actions=actions, bindings=bindings, device=device)
+
+
+class ConfigError(Exception):
+    """Raised when a loaded config fails validation."""
+
+
+def validate_config(config: AppConfig) -> None:
+    for action in config.actions.values():
+        if action.kind == "command" and not action.command:
+            raise ConfigError(f"action {action.name!r} is type=command but has no command")
+    for binding in config.bindings.values():
+        if binding.action not in config.actions:
+            raise ConfigError(f"binding {binding.name!r} references unknown action {binding.action!r}")
+        if binding.trigger not in ecodes.ecodes:
+            raise ConfigError(f"binding {binding.name!r} has unknown trigger {binding.trigger!r}")
