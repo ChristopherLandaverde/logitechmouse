@@ -1,48 +1,66 @@
 from __future__ import annotations
 
 import argparse
+import logging
+import signal
+import sys
 from pathlib import Path
 
-from .actions import run_action
-from .config import load_config
-from .device import DeviceBackend
+
+LOG_FORMAT = "%(asctime)s %(levelname)s  %(message)s"
+
+
+def _configure_logging() -> None:
+    logging.basicConfig(level=logging.INFO, format=LOG_FORMAT, datefmt="%Y-%m-%d %H:%M:%S")
+
+
+def _install_signal_handlers() -> None:
+    def _handle(signum, _frame):
+        logging.info("received signal %s, exiting", signum)
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, _handle)
+    signal.signal(signal.SIGTERM, _handle)
 
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="logitechmouse")
     parser.add_argument("--config", type=Path, help="Path to config TOML")
-    parser.add_argument("--dry-run", action="store_true", help="Do not execute commands")
-    parser.add_argument(
-        "--run-action",
-        metavar="NAME",
-        help="Run one configured action directly for testing",
-    )
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p_listen = sub.add_parser("listen", help="Run the event listener")
+
+    p_devices = sub.add_parser("devices", help="List detected input devices")
+
+    p_check = sub.add_parser("check-config", help="Validate config and exit")
+
+    p_run = sub.add_parser("run", help="Run a configured action once")
+    p_run.add_argument("name", help="Action name as defined in config")
+    p_run.add_argument("--dry-run", action="store_true", help="Do not spawn the command")
+
     return parser
 
 
 def main() -> int:
+    _configure_logging()
+    _install_signal_handlers()
+
     parser = build_parser()
     args = parser.parse_args()
 
-    config = load_config(args.config)
-    backend = DeviceBackend()
+    if args.command == "listen":
+        from .cli.listen import run as run_cmd
+    elif args.command == "devices":
+        from .cli.devices import run as run_cmd
+    elif args.command == "check-config":
+        from .cli.check_config import run as run_cmd
+    elif args.command == "run":
+        from .cli.run import run as run_cmd
+    else:
+        parser.error(f"unknown command: {args.command}")
 
-    if args.run_action:
-        action = config.actions.get(args.run_action)
-        if action is None:
-            parser.error(f"unknown action: {args.run_action}")
-
-        result = run_action(action, dry_run=args.dry_run)
-        print(result.detail)
-        return 0 if result.ok else 1
-
-    print("logitechmouse scaffold")
-    print(f"backend: {backend.describe()}")
-    print(f"actions: {len(config.actions)}")
-    print(f"bindings: {len(config.bindings)}")
-    return 0
+    return run_cmd(args)
 
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
