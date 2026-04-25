@@ -64,3 +64,54 @@ def test_list_candidates_marks_unreadable(monkeypatch):
     assert by_path["/dev/input/event5"].readable is True
     assert by_path["/dev/input/event5"].name == "Logitech MX Master 3S"
     assert by_path["/dev/input/event7"].readable is False
+
+
+def test_resolve_by_explicit_path():
+    devices = [FakeEvdev("/dev/input/event5", "Logitech MX Master 3S")]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig(path="/dev/input/event5"))
+    assert dev.path == "/dev/input/event5"
+
+
+def test_resolve_explicit_path_unreadable_raises():
+    devices = [FakeEvdev("/dev/input/event5", "x", readable=False)]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, pytest.raises(DeviceUnreadableError):
+        EvdevBackend().resolve(DeviceConfig(path="/dev/input/event5"))
+
+
+def test_resolve_by_name_substring_case_insensitive():
+    devices = [
+        FakeEvdev("/dev/input/event4", "AT Keyboard"),
+        FakeEvdev("/dev/input/event5", "Logitech MX Master 3S"),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig(name="mx master"))
+    assert dev.path == "/dev/input/event5"
+
+
+def test_resolve_auto_matches_logitech_or_mx():
+    devices = [
+        FakeEvdev("/dev/input/event4", "AT Keyboard"),
+        FakeEvdev("/dev/input/event5", "Logitech USB Receiver Mouse"),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig())
+    assert dev.path == "/dev/input/event5"
+
+
+def test_resolve_not_found_raises():
+    devices = [FakeEvdev("/dev/input/event4", "AT Keyboard")]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, pytest.raises(DeviceNotFoundError):
+        EvdevBackend().resolve(DeviceConfig())
+
+
+def test_resolve_path_missing_raises_not_found():
+    devices = [FakeEvdev("/dev/input/event5", "Logitech MX Master 3S")]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, pytest.raises(DeviceNotFoundError):
+        EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))

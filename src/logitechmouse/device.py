@@ -60,3 +60,32 @@ class EvdevBackend:
                     )
                 )
         return candidates
+
+    def resolve(self, device_cfg: DeviceConfig) -> InputDevice:
+        all_paths = list_devices()
+
+        if device_cfg.path:
+            if device_cfg.path not in all_paths:
+                raise DeviceNotFoundError(
+                    f"configured device path {device_cfg.path!r} not present"
+                )
+            try:
+                return InputDevice(device_cfg.path)
+            except (PermissionError, OSError) as exc:
+                raise DeviceUnreadableError(str(exc)) from exc
+
+        match_name = device_cfg.name
+        for path in all_paths:
+            try:
+                dev = InputDevice(path)
+            except (PermissionError, OSError):
+                continue
+            if match_name and match_name.lower() in dev.name.lower():
+                return dev
+            if not match_name and _AUTO_NAME_RE.search(dev.name):
+                return dev
+
+        criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
+        raise DeviceNotFoundError(
+            f"no input device matched {criterion}; try `logitechmouse devices`"
+        )
