@@ -16,13 +16,17 @@ class ActionResult:
 
 def run_action(action: Action, dry_run: bool = False) -> ActionResult:
     if action.kind != "command":
-        return ActionResult(action=action.name, ok=False, detail=f"unsupported action type: {action.kind}")
+        return ActionResult(action.name, False, f"unsupported action type: {action.kind}")
 
     if not action.command:
-        return ActionResult(action=action.name, ok=False, detail="missing command")
+        return ActionResult(action.name, False, "missing command")
 
     if dry_run:
-        return ActionResult(action=action.name, ok=True, detail=f"dry-run: {action.command}")
+        return ActionResult(action.name, True, f"dry-run: {action.command}")
 
-    subprocess.run(shlex.split(action.command), check=True)
-    return ActionResult(action=action.name, ok=True, detail=f"executed: {action.command}")
+    try:
+        subprocess.Popen(shlex.split(action.command))
+    except (FileNotFoundError, PermissionError, OSError) as exc:
+        return ActionResult(action.name, False, f"failed to spawn: {exc}")
+
+    return ActionResult(action.name, True, f"fired: {action.command}")
