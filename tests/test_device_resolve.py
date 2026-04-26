@@ -122,6 +122,41 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_resolve_by_name_substring_skips_node_without_button_codes():
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Logitech MX Master Consumer Control",
+            button_codes=[],
+        ),
+        FakeEvdev(
+            "/dev/input/event5",
+            "Logitech MX Master 3S Mouse",
+            button_codes=[ecodes.BTN_LEFT, ecodes.BTN_TASK],
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig(name="mx master"))
+    assert dev.path == "/dev/input/event5"
+
+
+def test_resolve_by_name_substring_all_without_button_codes_raises_actionable():
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Logitech MX Master Consumer Control",
+            button_codes=[],
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, pytest.raises(DeviceNotFoundError) as exc_info:
+        EvdevBackend().resolve(DeviceConfig(name="mx master"))
+    msg = str(exc_info.value).lower()
+    assert "button" in msg
+    assert "--device" in msg
+
+
 def test_resolve_auto_all_matches_without_button_codes_raises_actionable():
     devices = [
         FakeEvdev(

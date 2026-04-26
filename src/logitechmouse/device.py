@@ -94,7 +94,10 @@ class EvdevBackend:
             except (PermissionError, OSError):
                 continue
             if match_name and match_name.lower() in dev.name.lower():
-                return dev
+                if _has_button_capability(dev):
+                    return dev
+                saw_match_without_buttons = True
+                continue
             if not match_name and _AUTO_NAME_RE.search(dev.name):
                 if _has_button_capability(dev):
                     return dev
