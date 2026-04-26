@@ -21,10 +21,22 @@ _BTN_MAX = 0x151  # ecodes.BTN_GEAR_UP
 def _has_button_capability(dev: InputDevice) -> bool:
     try:
         caps = dev.capabilities()
-    except Exception:
+    except (OSError, AttributeError):
         return False
     keys = caps.get(ecodes.EV_KEY, []) or []
     return any(_BTN_MIN <= code <= _BTN_MAX for code in keys)
+
+
+def _close_quietly(dev: InputDevice | None) -> None:
+    if dev is None:
+        return
+    close = getattr(dev, "close", None)
+    if close is None:
+        return
+    try:
+        close()
+    except (OSError, AttributeError):
+        pass
 
 
 def _score_for_triggers(dev: InputDevice, triggers: set[str] | None) -> int:
@@ -36,7 +48,7 @@ def _score_for_triggers(dev: InputDevice, triggers: set[str] | None) -> int:
     """
     try:
         caps = dev.capabilities()
-    except Exception:
+    except (OSError, AttributeError):
         return 0
     keys = set(caps.get(ecodes.EV_KEY, []) or [])
     if triggers:
@@ -73,6 +85,7 @@ class EvdevBackend:
     def list_candidates(self) -> list[CandidateDevice]:
         candidates: list[CandidateDevice] = []
         for path in list_devices():
+            dev = None
             try:
                 dev = InputDevice(path)
                 candidates.append(
@@ -95,6 +108,8 @@ class EvdevBackend:
                         readable=False,
                     )
                 )
+            finally:
+                _close_quietly(dev)
         return candidates
 
     def resolve(
@@ -133,8 +148,14 @@ class EvdevBackend:
             else:
                 is_match = bool(_AUTO_NAME_RE.search(dev.name))
             if not is_match:
+                _close_quietly(dev)
                 continue
             scored.append((dev, _score_for_triggers(dev, triggers)))
+
+        def _release_all_and_raise(exc: Exception) -> None:
+            for d, _ in scored:
+                _close_quietly(d)
+            raise exc
 
         if not scored:
             criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
@@ -146,17 +167,21 @@ class EvdevBackend:
         if best_score == 0:
             if triggers:
                 wanted = ", ".join(sorted(triggers))
-                raise DeviceNotFoundError(
+                _release_all_and_raise(DeviceNotFoundError(
                     f"found Logitech device(s) but none advertise the "
                     f"configured trigger codes ({wanted}); run "
                     f"`logitechmouse devices` and pass the correct node "
                     f"via --device"
-                )
-            raise DeviceNotFoundError(
+                ))
+            _release_all_and_raise(DeviceNotFoundError(
                 "found Logitech device(s) but none expose button (BTN_*) "
                 "capabilities; run `logitechmouse devices` and pass the "
                 "correct node via --device"
-            )
+            ))
+
+        for dev, _ in scored:
+            if dev is not best_dev:
+                _close_quietly(dev)
         return best_dev
 
     def read_loop(self, device: InputDevice) -> Iterator[InputEvent]:

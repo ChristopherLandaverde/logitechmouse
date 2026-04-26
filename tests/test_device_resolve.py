@@ -21,6 +21,7 @@ class FakeEvdev:
     product: int = 0x4082
     readable: bool = True
     button_codes: list = field(default_factory=lambda: [ecodes.BTN_LEFT])
+    closed: bool = False
 
     @property
     def info(self):
@@ -31,6 +32,9 @@ class FakeEvdev:
 
     def capabilities(self):
         return {ecodes.EV_KEY: list(self.button_codes)}
+
+    def close(self):
+        self.closed = True
 
 
 def make_factory(devices):
@@ -120,6 +124,41 @@ def test_resolve_path_missing_raises_not_found():
     p1, p2 = patch_backend(devices)
     with p1, p2, pytest.raises(DeviceNotFoundError):
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
+
+
+def test_resolve_closes_losing_candidates():
+    """Each non-winning InputDevice opened during resolution must be released
+    so we don't accumulate open file descriptors across long-running listens."""
+    winner = FakeEvdev(
+        "/dev/input/event5",
+        "Logitech USB Receiver Mouse",
+        button_codes=[ecodes.BTN_LEFT, ecodes.BTN_TASK],
+    )
+    loser = FakeEvdev(
+        "/dev/input/event4",
+        "Logitech Receiver Consumer Control",
+        button_codes=[],
+    )
+    devices = [loser, winner]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig())
+    assert dev.path == "/dev/input/event5"
+    assert loser.closed is True
+    assert winner.closed is False  # caller owns the winner; do NOT close it
+
+
+def test_list_candidates_closes_inspected_devices():
+    """list_candidates() inspects every node but returns metadata only;
+    each opened device must be released."""
+    devs = [
+        FakeEvdev("/dev/input/event5", "Logitech MX Master 3S"),
+        FakeEvdev("/dev/input/event7", "Other thing"),
+    ]
+    p1, p2 = patch_backend(devs)
+    with p1, p2:
+        EvdevBackend().list_candidates()
+    assert all(d.closed for d in devs)
 
 
 def test_resolve_raises_when_no_match_advertises_configured_triggers():
