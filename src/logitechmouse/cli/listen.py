@@ -30,9 +30,11 @@ def run(args: argparse.Namespace) -> int:
     if getattr(args, "device", None):
         cfg.device.path = args.device
 
+    triggers = {b.trigger for b in cfg.bindings.values()} or None
+
     backend = EvdevBackend()
     try:
-        device = backend.resolve(cfg.device)
+        device = backend.resolve(cfg.device, triggers=triggers)
     except DeviceUnreadableError as exc:
         logging.error("%s\n%s", exc, REMEDIATION)
         return 1
