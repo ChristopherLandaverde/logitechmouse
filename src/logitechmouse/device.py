@@ -105,16 +105,15 @@ class EvdevBackend:
                 dev = InputDevice(path)
             except (PermissionError, OSError):
                 continue
-            if match_name and match_name.lower() in dev.name.lower():
-                if _has_button_capability(dev):
-                    return dev
-                saw_match_without_buttons = True
+            if match_name:
+                is_match = match_name.lower() in dev.name.lower()
+            else:
+                is_match = bool(_AUTO_NAME_RE.search(dev.name))
+            if not is_match:
                 continue
-            if not match_name and _AUTO_NAME_RE.search(dev.name):
-                if _has_button_capability(dev):
-                    return dev
-                saw_match_without_buttons = True
-                continue
+            if _has_button_capability(dev):
+                return dev
+            saw_match_without_buttons = True
 
         if saw_match_without_buttons:
             raise DeviceNotFoundError(
