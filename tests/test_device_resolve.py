@@ -1,7 +1,8 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from unittest.mock import patch
 
 import pytest
+from evdev import ecodes
 
 from logitechmouse.config import DeviceConfig
 from logitechmouse.device import (
@@ -19,6 +20,7 @@ class FakeEvdev:
     vendor: int = 0x046D
     product: int = 0x4082
     readable: bool = True
+    button_codes: list = field(default_factory=lambda: [ecodes.BTN_LEFT])
 
     @property
     def info(self):
@@ -26,6 +28,9 @@ class FakeEvdev:
             vendor = self.vendor
             product = self.product
         return _I()
+
+    def capabilities(self):
+        return {ecodes.EV_KEY: list(self.button_codes)}
 
 
 def make_factory(devices):
@@ -115,3 +120,22 @@ def test_resolve_path_missing_raises_not_found():
     p1, p2 = patch_backend(devices)
     with p1, p2, pytest.raises(DeviceNotFoundError):
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
+
+
+def test_resolve_auto_skips_logitech_subnode_without_button_codes():
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Logitech USB Receiver Consumer Control",
+            button_codes=[],
+        ),
+        FakeEvdev(
+            "/dev/input/event5",
+            "Logitech USB Receiver Mouse",
+            button_codes=[ecodes.BTN_LEFT, ecodes.BTN_TASK],
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(DeviceConfig())
+    assert dev.path == "/dev/input/event5"

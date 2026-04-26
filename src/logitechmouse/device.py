@@ -11,6 +11,18 @@ from .config import DeviceConfig
 
 _AUTO_NAME_RE = re.compile(r"logitech|mx (master|anywhere|ergo|vertical)", re.IGNORECASE)
 
+_BTN_MIN = 0x100  # ecodes.BTN_MISC
+_BTN_MAX = 0x151  # ecodes.BTN_GEAR_UP
+
+
+def _has_button_capability(dev: InputDevice) -> bool:
+    try:
+        caps = dev.capabilities()
+    except Exception:
+        return False
+    keys = caps.get(ecodes.EV_KEY, []) or []
+    return any(_BTN_MIN <= code <= _BTN_MAX for code in keys)
+
 
 class DeviceNotFoundError(Exception):
     """Raised when no device matches the resolution criteria."""
@@ -83,7 +95,9 @@ class EvdevBackend:
             if match_name and match_name.lower() in dev.name.lower():
                 return dev
             if not match_name and _AUTO_NAME_RE.search(dev.name):
-                return dev
+                if _has_button_capability(dev):
+                    return dev
+                continue
 
         criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
         raise DeviceNotFoundError(
