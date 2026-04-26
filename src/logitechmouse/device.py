@@ -87,6 +87,7 @@ class EvdevBackend:
                 raise DeviceUnreadableError(str(exc)) from exc
 
         match_name = device_cfg.name
+        saw_match_without_buttons = False
         for path in all_paths:
             try:
                 dev = InputDevice(path)
@@ -97,8 +98,15 @@ class EvdevBackend:
             if not match_name and _AUTO_NAME_RE.search(dev.name):
                 if _has_button_capability(dev):
                     return dev
+                saw_match_without_buttons = True
                 continue
 
+        if saw_match_without_buttons:
+            raise DeviceNotFoundError(
+                "found Logitech device(s) but none expose button (BTN_*) "
+                "capabilities; run `logitechmouse devices` and pass the "
+                "correct node via --device"
+            )
         criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
         raise DeviceNotFoundError(
             f"no input device matched {criterion}; try `logitechmouse devices`"

@@ -122,6 +122,30 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_resolve_auto_all_matches_without_button_codes_raises_actionable():
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Logitech USB Receiver Consumer Control",
+            button_codes=[],
+        ),
+        FakeEvdev(
+            "/dev/input/event5",
+            "Logitech USB Receiver Keyboard",
+            button_codes=[],
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        with pytest.raises(DeviceNotFoundError) as exc_info:
+            EvdevBackend().resolve(DeviceConfig())
+
+    msg = str(exc_info.value).lower()
+    assert "button" in msg
+    assert "devices" in msg  # tells user to inspect via `logitechmouse devices`
+    assert "--device" in msg  # tells user to pass --device
+
+
 def test_resolve_auto_skips_logitech_subnode_without_button_codes():
     devices = [
         FakeEvdev(
