@@ -122,6 +122,30 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_resolve_auto_prefers_subnode_advertising_configured_triggers():
+    """When multiple Logitech subnodes are button-capable, the one that
+    actually advertises the user's configured trigger codes wins, even
+    if it isn't first in iteration order."""
+    devices = [
+        FakeEvdev(
+            "/dev/input/event28",
+            "Logitech USB Receiver",
+            button_codes=[ecodes.BTN_TOUCH, ecodes.BTN_TOOL_DOUBLETAP],
+        ),
+        FakeEvdev(
+            "/dev/input/event25",
+            "Logitech USB Receiver Mouse",
+            button_codes=[ecodes.BTN_LEFT, ecodes.BTN_SIDE, ecodes.BTN_TASK],
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        dev = EvdevBackend().resolve(
+            DeviceConfig(), triggers={"BTN_TASK", "BTN_SIDE"}
+        )
+    assert dev.path == "/dev/input/event25"
+
+
 def test_list_candidates_reports_button_capable_flag():
     devices = [
         FakeEvdev(

@@ -27,6 +27,25 @@ def _has_button_capability(dev: InputDevice) -> bool:
     return any(_BTN_MIN <= code <= _BTN_MAX for code in keys)
 
 
+def _score_for_triggers(dev: InputDevice, triggers: set[str] | None) -> int:
+    """How well does this device match the user's intent?
+
+    With explicit triggers: return the count of trigger codes the device
+    advertises. With no triggers (or unknown trigger names): fall back to
+    1 if the device exposes any BTN_*, else 0.
+    """
+    try:
+        caps = dev.capabilities()
+    except Exception:
+        return 0
+    keys = set(caps.get(ecodes.EV_KEY, []) or [])
+    if triggers:
+        trigger_codes = {ecodes.ecodes[t] for t in triggers if t in ecodes.ecodes}
+        if trigger_codes:
+            return len(keys & trigger_codes)
+    return 1 if any(_BTN_MIN <= k <= _BTN_MAX for k in keys) else 0
+
+
 class DeviceNotFoundError(Exception):
     """Raised when no device matches the resolution criteria."""
 
@@ -78,7 +97,11 @@ class EvdevBackend:
                 )
         return candidates
 
-    def resolve(self, device_cfg: DeviceConfig) -> InputDevice:
+    def resolve(
+        self,
+        device_cfg: DeviceConfig,
+        triggers: set[str] | None = None,
+    ) -> InputDevice:
         all_paths = list_devices()
 
         if device_cfg.path:
@@ -99,7 +122,7 @@ class EvdevBackend:
             return dev
 
         match_name = device_cfg.name
-        saw_match_without_buttons = False
+        scored: list[tuple[InputDevice, int]] = []
         for path in all_paths:
             try:
                 dev = InputDevice(path)
@@ -111,20 +134,22 @@ class EvdevBackend:
                 is_match = bool(_AUTO_NAME_RE.search(dev.name))
             if not is_match:
                 continue
-            if _has_button_capability(dev):
-                return dev
-            saw_match_without_buttons = True
+            scored.append((dev, _score_for_triggers(dev, triggers)))
 
-        if saw_match_without_buttons:
+        if not scored:
+            criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
+            raise DeviceNotFoundError(
+                f"no input device matched {criterion}; try `logitechmouse devices`"
+            )
+
+        best_dev, best_score = max(scored, key=lambda pair: pair[1])
+        if best_score == 0:
             raise DeviceNotFoundError(
                 "found Logitech device(s) but none expose button (BTN_*) "
                 "capabilities; run `logitechmouse devices` and pass the "
                 "correct node via --device"
             )
-        criterion = f"name~{match_name!r}" if match_name else "auto-discovery"
-        raise DeviceNotFoundError(
-            f"no input device matched {criterion}; try `logitechmouse devices`"
-        )
+        return best_dev
 
     def read_loop(self, device: InputDevice) -> Iterator[InputEvent]:
         """Yield InputEvent for every key-down on `device`. Blocking."""
