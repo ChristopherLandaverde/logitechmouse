@@ -122,6 +122,26 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_resolve_raises_when_no_match_advertises_configured_triggers():
+    """A subnode with BTN_LEFT only is button-capable but useless to a user
+    who bound BTN_TASK. With explicit triggers, this must surface as an
+    actionable error naming the missing trigger codes — not silently pick
+    the device and never fire."""
+    devices = [
+        FakeEvdev(
+            "/dev/input/event28",
+            "Logitech USB Receiver",
+            button_codes=[ecodes.BTN_LEFT],  # button-capable but no BTN_TASK
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, pytest.raises(DeviceNotFoundError) as exc_info:
+        EvdevBackend().resolve(DeviceConfig(), triggers={"BTN_TASK"})
+    msg = str(exc_info.value)
+    assert "BTN_TASK" in msg
+    assert "--device" in msg
+
+
 def test_resolve_auto_prefers_subnode_advertising_configured_triggers():
     """When multiple Logitech subnodes are button-capable, the one that
     actually advertises the user's configured trigger codes wins, even

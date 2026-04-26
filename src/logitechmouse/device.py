@@ -144,6 +144,14 @@ class EvdevBackend:
 
         best_dev, best_score = max(scored, key=lambda pair: pair[1])
         if best_score == 0:
+            if triggers:
+                wanted = ", ".join(sorted(triggers))
+                raise DeviceNotFoundError(
+                    f"found Logitech device(s) but none advertise the "
+                    f"configured trigger codes ({wanted}); run "
+                    f"`logitechmouse devices` and pass the correct node "
+                    f"via --device"
+                )
             raise DeviceNotFoundError(
                 "found Logitech device(s) but none expose button (BTN_*) "
                 "capabilities; run `logitechmouse devices` and pass the "
