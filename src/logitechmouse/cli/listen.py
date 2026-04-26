@@ -27,6 +27,9 @@ def run(args: argparse.Namespace) -> int:
         logging.error("config invalid: %s", exc)
         return 1
 
+    if getattr(args, "device", None):
+        cfg.device.path = args.device
+
     backend = EvdevBackend()
     try:
         device = backend.resolve(cfg.device)

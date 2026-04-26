@@ -29,10 +29,16 @@ def build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_listen = sub.add_parser("listen", help="Run the event listener")
+    p_listen.add_argument(
+        "--device", default=None, help="Override [device].path with this event node"
+    )
 
     p_devices = sub.add_parser("devices", help="List detected input devices")
 
     p_check = sub.add_parser("check-config", help="Validate config and exit")
+    p_check.add_argument(
+        "--device", default=None, help="Override [device].path with this event node"
+    )
 
     p_run = sub.add_parser("run", help="Run a configured action once")
     p_run.add_argument("name", help="Action name as defined in config")

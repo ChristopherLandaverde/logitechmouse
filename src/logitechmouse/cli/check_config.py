@@ -17,6 +17,9 @@ def run(args: argparse.Namespace) -> int:
         logging.error("could not load config: %s", exc)
         return 1
 
+    if getattr(args, "device", None):
+        cfg.device.path = args.device
+
     print(
         f"OK: {len(cfg.actions)} actions, {len(cfg.bindings)} bindings, "
         f"device={cfg.device.path or cfg.device.name or '(auto)'}"
