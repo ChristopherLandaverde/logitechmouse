@@ -122,6 +122,35 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_list_candidates_reports_button_capable_flag():
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Logitech Receiver Consumer Control",
+            button_codes=[],
+        ),
+        FakeEvdev(
+            "/dev/input/event5",
+            "Logitech MX Master 3S Mouse",
+            button_codes=[ecodes.BTN_LEFT, ecodes.BTN_TASK],
+        ),
+        FakeEvdev(
+            "/dev/input/event7",
+            "Locked Device",
+            readable=False,
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2:
+        result = EvdevBackend().list_candidates()
+
+    by_path = {c.path: c for c in result}
+    assert by_path["/dev/input/event4"].button_capable is False
+    assert by_path["/dev/input/event5"].button_capable is True
+    # Unreadable nodes can't be inspected; flag must be False (not None) for table rendering.
+    assert by_path["/dev/input/event7"].button_capable is False
+
+
 def test_resolve_explicit_path_bypasses_capability_filter_with_warning(caplog):
     devices = [
         FakeEvdev(

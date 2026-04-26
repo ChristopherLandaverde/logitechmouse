@@ -42,6 +42,7 @@ class CandidateDevice:
     vendor: int
     product: int
     readable: bool
+    button_capable: bool = False
 
 
 @dataclass
@@ -62,6 +63,7 @@ class EvdevBackend:
                         vendor=dev.info.vendor,
                         product=dev.info.product,
                         readable=True,
+                        button_capable=_has_button_capability(dev),
                     )
                 )
             except (PermissionError, OSError):
