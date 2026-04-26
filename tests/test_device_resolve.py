@@ -122,6 +122,21 @@ def test_resolve_path_missing_raises_not_found():
         EvdevBackend().resolve(DeviceConfig(path="/dev/input/event99"))
 
 
+def test_resolve_explicit_path_bypasses_capability_filter_with_warning(caplog):
+    devices = [
+        FakeEvdev(
+            "/dev/input/event4",
+            "Some Generic Pedal",
+            button_codes=[],  # no BTN_* codes
+        ),
+    ]
+    p1, p2 = patch_backend(devices)
+    with p1, p2, caplog.at_level("WARNING"):
+        dev = EvdevBackend().resolve(DeviceConfig(path="/dev/input/event4"))
+    assert dev.path == "/dev/input/event4"
+    assert any("button" in rec.message.lower() for rec in caplog.records)
+
+
 def test_resolve_by_name_substring_skips_node_without_button_codes():
     devices = [
         FakeEvdev(

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import re
 from dataclasses import dataclass
 from typing import Iterator
@@ -7,6 +8,8 @@ from typing import Iterator
 from evdev import InputDevice, categorize, ecodes, list_devices
 
 from .config import DeviceConfig
+
+logger = logging.getLogger(__name__)
 
 
 _AUTO_NAME_RE = re.compile(r"logitech|mx (master|anywhere|ergo|vertical)", re.IGNORECASE)
@@ -82,9 +85,16 @@ class EvdevBackend:
                     f"configured device path {device_cfg.path!r} not present"
                 )
             try:
-                return InputDevice(device_cfg.path)
+                dev = InputDevice(device_cfg.path)
             except (PermissionError, OSError) as exc:
                 raise DeviceUnreadableError(str(exc)) from exc
+            if not _has_button_capability(dev):
+                logger.warning(
+                    "device %s exposes no button (BTN_*) capabilities; "
+                    "configured triggers may never fire",
+                    device_cfg.path,
+                )
+            return dev
 
         match_name = device_cfg.name
         saw_match_without_buttons = False
