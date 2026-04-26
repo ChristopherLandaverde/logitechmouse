@@ -1,3 +1,8 @@
+# Optional. Omit to auto-discover the first Logitech / MX device.
+# [device]
+# name = "MX Master"
+# path = "/dev/input/event7"
+
 [actions.screenshot]
 type = "command"
 command = "gnome-screenshot -a"
@@ -6,10 +11,14 @@ command = "gnome-screenshot -a"
 type = "command"
 command = "gnome-screenshot"
 
+# BTN_TASK is the MX gesture button (under the thumb). It has no default
+# OS action, so binding it does not double-fire with browser navigation.
 [bindings.gesture_button]
-trigger = "BTN_EXTRA"
+trigger = "BTN_TASK"
 action = "screenshot"
 
+# BTN_SIDE / BTN_EXTRA double-fire with browser back / forward in this MVP
+# (no device grabbing yet). Bind them only if you accept that overlap.
 [bindings.thumb_button]
 trigger = "BTN_SIDE"
 action = "fullscreen"

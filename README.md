@@ -13,7 +13,9 @@ Start with the useful behavior first:
 
 ## Project status
 
-This repository is in the initial scaffold stage. The current code establishes the package layout, config model, and CLI entry point for future implementation.
+Phase 2 MVP: the CLI listens on a real Logitech MX device via `evdev` and
+fires shell-command actions on configured button presses. No device grabbing,
+no overlay, no profiles yet — those are scheduled for later phases.
 
 ## Planned features
 
@@ -28,8 +30,27 @@ This repository is in the initial scaffold stage. The current code establishes t
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
-pip install -e .
+pip install -e ".[dev]"
+pytest
 logitechmouse --help
+```
+
+## Permissions
+
+Reading `/dev/input/event*` requires membership in the `input` group:
+
+```bash
+sudo usermod -aG input $USER
+# log out and back in for the change to apply
+```
+
+## Usage
+
+```bash
+logitechmouse devices                   # list detected input devices
+logitechmouse check-config              # validate config and exit
+logitechmouse run screenshot --dry-run  # run a configured action once
+logitechmouse listen                    # start the event listener
 ```
 
 ## Configuration
@@ -40,17 +61,9 @@ The app looks for a TOML config file, defaulting to:
 ~/.config/logitechmouse/config.toml
 ```
 
-Example:
-
-```toml
-[actions.screenshot]
-type = "command"
-command = "gnome-screenshot -a"
-
-[bindings.gesture_button]
-trigger = "BTN_EXTRA"
-action = "screenshot"
-```
+See `examples/config.toml` for a working sample. Default examples bind the
+gesture button (`BTN_TASK`) because it has no OS-default action — `BTN_SIDE`
+and `BTN_EXTRA` will double-fire with browser back/forward in this MVP.
 
 ## Documents
 
