@@ -25,7 +25,7 @@ def run_action(action: Action, dry_run: bool = False) -> ActionResult:
         return ActionResult(action.name, True, f"dry-run: {action.command}")
 
     try:
-        subprocess.Popen(shlex.split(action.command))
+        subprocess.Popen(shlex.split(action.command), start_new_session=True)
     except (FileNotFoundError, PermissionError, OSError) as exc:
         return ActionResult(action.name, False, f"failed to spawn: {exc}")
 

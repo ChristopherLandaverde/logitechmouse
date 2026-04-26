@@ -193,5 +193,12 @@ class EvdevBackend:
                 continue
             key_event = categorize(event)
             keycode = key_event.keycode
-            name = keycode[0] if isinstance(keycode, list) else keycode
+            if isinstance(keycode, list):
+                name = keycode[0] if keycode else None
+            elif isinstance(keycode, str):
+                name = keycode
+            else:
+                name = None
+            if not name:
+                continue
             yield InputEvent(trigger=name)
