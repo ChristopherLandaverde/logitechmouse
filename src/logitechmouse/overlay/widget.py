@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 import os
 
-from PyQt6.QtCore import Qt, QPoint, QRectF, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
+from PyQt6.QtCore import Qt, QPoint, QRect, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen, QRegion
 from PyQt6.QtWidgets import QWidget
 
 from ..config import Ring
@@ -99,6 +99,11 @@ class RingWidget(QWidget):
             size,
             size,
         )
+        # Mask the widget to a circle so the four square corners don't
+        # render against the desktop. WA_TranslucentBackground is off
+        # in v1 (compositor compatibility), so without this mask the
+        # widget would show as an opaque square.
+        self.setMask(QRegion(QRect(0, 0, size, size), QRegion.RegionType.Ellipse))
         self.update_cursor_position(*cursor_pos)
         self.show()
         self.raise_()
