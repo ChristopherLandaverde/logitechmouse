@@ -51,7 +51,8 @@ def run(args: argparse.Namespace) -> int:
 
     bindings_by_trigger = {b.trigger: b for b in cfg.bindings.values()}
     summary = ", ".join(
-        f"{b.name}[{b.trigger}]->{b.action}" for b in cfg.bindings.values()
+        f"{b.name}[{b.trigger}]->{b.target.kind}:{b.target.name}"
+        for b in cfg.bindings.values()
     ) or "(none)"
     logging.info("listening on %s (%s)", device.path, device.name)
     logging.info("bindings: %s", summary)
@@ -61,7 +62,10 @@ def run(args: argparse.Namespace) -> int:
             binding = bindings_by_trigger.get(event.trigger)
             if binding is None:
                 continue
-            action = cfg.actions[binding.action]
+            if binding.target.kind != "action":
+                # Ring targets are wired in a later task; skip silently for now.
+                continue
+            action = cfg.actions[binding.target.name]
             result = run_action(action)
             if result.ok:
                 logging.info("%s", result.detail)

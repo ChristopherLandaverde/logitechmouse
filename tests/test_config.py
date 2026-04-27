@@ -33,7 +33,8 @@ def test_parses_actions_and_bindings(tmp_path):
     cfg = load_config(p)
     assert cfg.actions["shot"].command == "true"
     assert cfg.bindings["gesture"].trigger == "BTN_TASK"
-    assert cfg.bindings["gesture"].action == "shot"
+    assert cfg.bindings["gesture"].target.kind == "action"
+    assert cfg.bindings["gesture"].target.name == "shot"
 
 
 def test_parses_device_section(tmp_path):
@@ -76,7 +77,7 @@ def test_validate_rejects_unknown_action_reference(tmp_path):
 
         [bindings.g]
         trigger = "BTN_TASK"
-        action = "missing"
+        target = "action:missing"
     """)
     cfg = load_config(p)
     with pytest.raises(ConfigError, match="binding 'g' references unknown action 'missing'"):

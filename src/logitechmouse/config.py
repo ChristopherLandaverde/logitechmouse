@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -50,11 +51,37 @@ def parse_target_string(raw: str) -> "Target":
     return Target(kind=kind, name=name)
 
 
+def _parse_binding(name: str, data: dict) -> "Binding":
+    has_target = "target" in data
+    has_action = "action" in data
+    if has_target and has_action:
+        raise ConfigError(
+            f"binding {name!r}: cannot specify both 'action' and 'target'; "
+            f"use 'target = \"action:NAME\"' (modern) or 'action = \"NAME\"' (legacy)"
+        )
+    if has_target:
+        target = parse_target_string(data["target"])
+    elif has_action:
+        logging.info(
+            "binding %r uses deprecated 'action = ...' form; the modern "
+            "equivalent is 'target = \"action:%s\"'",
+            name, data["action"],
+        )
+        target = Target(kind="action", name=data["action"])
+    else:
+        raise ConfigError(
+            f"binding {name!r} must specify 'target' (e.g. 'target = \"action:screenshot\"')"
+        )
+    if "trigger" not in data:
+        raise ConfigError(f"binding {name!r} missing 'trigger'")
+    return Binding(name=name, trigger=data["trigger"], target=target)
+
+
 @dataclass
 class Binding:
     name: str
     trigger: str
-    action: str
+    target: Target
 
 
 @dataclass
@@ -87,11 +114,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         for name, data in raw.get("actions", {}).items()
     }
     bindings = {
-        name: Binding(
-            name=name,
-            trigger=data["trigger"],
-            action=data["action"],
-        )
+        name: _parse_binding(name, data)
         for name, data in raw.get("bindings", {}).items()
     }
     raw_device = raw.get("device", {}) or {}
@@ -106,9 +129,18 @@ def load_config(path: Path | None = None) -> AppConfig:
 def validate_config(config: AppConfig) -> None:
     for action in config.actions.values():
         if action.kind == "command" and not action.command:
-            raise ConfigError(f"action {action.name!r} is type=command but has no command")
+            raise ConfigError(
+                f"action {action.name!r} is type=command but has no command"
+            )
     for binding in config.bindings.values():
-        if binding.action not in config.actions:
-            raise ConfigError(f"binding {binding.name!r} references unknown action {binding.action!r}")
         if binding.trigger not in ecodes.ecodes:
-            raise ConfigError(f"binding {binding.name!r} has unknown trigger {binding.trigger!r}")
+            raise ConfigError(
+                f"binding {binding.name!r} has unknown trigger {binding.trigger!r}"
+            )
+        if binding.target.kind == "action":
+            if binding.target.name not in config.actions:
+                raise ConfigError(
+                    f"binding {binding.name!r} references unknown action "
+                    f"{binding.target.name!r}"
+                )
+        # binding.target.kind == "ring" is validated in Task 7 (a future task).
