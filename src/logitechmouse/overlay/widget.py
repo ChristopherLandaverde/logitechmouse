@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import math
+
 from PyQt6.QtCore import Qt, QPoint, QRectF
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
@@ -108,10 +110,9 @@ class RingWidget(QWidget):
             p.drawPie(rect, int(qt_start_angle * 16), int(wedge_deg * 16))
 
             label_radius = outer * 0.70
-            theta_rad = (theta_center - 90.0) * 3.141592653589793 / 180.0
-            import math as _m
-            lx = ox + _m.cos(theta_rad) * label_radius
-            ly = oy + _m.sin(theta_rad) * label_radius
+            theta_rad = math.radians(theta_center - 90.0)
+            lx = ox + math.cos(theta_rad) * label_radius
+            ly = oy + math.sin(theta_rad) * label_radius
             p.setPen(LABEL_COLOR)
             text = self._ring.segments[i].label
             metrics = p.fontMetrics()
