@@ -53,7 +53,11 @@ class VirtualDevice:
 
         EV_SYN is mapped to UInput.syn() so frame boundaries are preserved.
         Everything else goes through UInput.write(type, code, value).
+        Silently no-ops after close() so the listener's worker thread can
+        race with main-thread teardown without raising EBADF.
         """
+        if self._closed:
+            return
         if event.type == ecodes.EV_SYN:
             self._ui.syn()
         else:

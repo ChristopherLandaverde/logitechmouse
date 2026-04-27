@@ -94,3 +94,15 @@ def test_virtual_device_close_is_idempotent():
     v.close()
     v.close()
     assert fake_ui.close.call_count == 1
+
+
+def test_virtual_device_write_event_after_close_is_silent():
+    """Worker-thread races with main-thread close must not raise EBADF."""
+    fake_ui = MagicMock()
+    with patch("logitechmouse.device_grab.UInput", return_value=fake_ui):
+        v = VirtualDevice(_fake_caps())
+    v.close()
+    raw = MagicMock(type=ecodes.EV_REL, code=ecodes.REL_X, value=1)
+    v.write_event(raw)  # must not raise
+    fake_ui.write.assert_not_called()
+    fake_ui.syn.assert_not_called()
