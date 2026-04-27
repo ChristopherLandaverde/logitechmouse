@@ -11,7 +11,6 @@ from ..device import (
     DeviceNotFoundError,
     DeviceUnreadableError,
     EvdevBackend,
-    InputEvent,
 )
 
 
@@ -41,10 +40,10 @@ def dispatch_event(
         if pressed:
             action = cfg.actions[binding.target.name]
             result = run_action(action)
-            if result is not None and getattr(result, "ok", True):
-                logging.info("%s", getattr(result, "detail", ""))
-            elif result is not None:
-                logging.warning("action %r %s", action.name, getattr(result, "detail", ""))
+            if result.ok:
+                logging.info("%s", result.detail)
+            else:
+                logging.warning("action %r %s", action.name, result.detail)
     elif binding.target.kind == "ring":
         ring = cfg.rings[binding.target.name]
         if pressed:
