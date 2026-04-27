@@ -38,3 +38,21 @@ def is_in_dead_zone(dx: float, dy: float, dead_zone_radius: float) -> bool:
     treated as outside the dead zone.
     """
     return math.hypot(dx, dy) < dead_zone_radius
+
+
+def shifted_center_for_screen(
+    cursor_x: int,
+    cursor_y: int,
+    screen_left: int,
+    screen_top: int,
+    screen_right: int,
+    screen_bottom: int,
+    ring_radius: int,
+) -> tuple[int, int]:
+    """Return the ring center such that a circle of `ring_radius` is fully
+    inside the given screen rectangle. Defaults to the cursor; shifts inward
+    only as needed. The cursor itself is never moved.
+    """
+    cx = max(screen_left + ring_radius, min(cursor_x, screen_right - ring_radius))
+    cy = max(screen_top + ring_radius, min(cursor_y, screen_bottom - ring_radius))
+    return cx, cy

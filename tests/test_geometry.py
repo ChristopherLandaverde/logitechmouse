@@ -68,3 +68,73 @@ def test_at_exact_dead_zone_radius_is_outside():
 
 def test_at_origin_is_in_dead_zone():
     assert is_in_dead_zone(dx=0, dy=0, dead_zone_radius=45) is True
+
+
+from logitechmouse.overlay.geometry import shifted_center_for_screen
+
+
+def test_no_shift_when_ring_fits_at_cursor():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=1000, cursor_y=500,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert (cx, cy) == (1000, 500)
+
+
+def test_shifts_inward_from_left_edge():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=10, cursor_y=500,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert cx == 180
+    assert cy == 500
+
+
+def test_shifts_inward_from_right_edge():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=1910, cursor_y=500,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert cx == 1740
+    assert cy == 500
+
+
+def test_shifts_inward_from_top_edge():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=1000, cursor_y=10,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert cx == 1000
+    assert cy == 180
+
+
+def test_shifts_inward_from_bottom_edge():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=1000, cursor_y=1075,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert cx == 1000
+    assert cy == 900
+
+
+def test_shifts_inward_from_corner():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=10, cursor_y=10,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert (cx, cy) == (180, 180)
+
+
+def test_does_not_shift_cursor_only_ring_center():
+    cx, cy = shifted_center_for_screen(
+        cursor_x=10, cursor_y=10,
+        screen_left=0, screen_top=0, screen_right=1920, screen_bottom=1080,
+        ring_radius=180,
+    )
+    assert (cx, cy) != (10, 10)
