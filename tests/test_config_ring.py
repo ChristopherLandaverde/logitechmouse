@@ -168,3 +168,42 @@ def test_no_rings_section_yields_empty_dict(tmp_path):
     """)
     cfg = load_config(p)
     assert cfg.rings == {}
+
+
+def test_validate_rejects_ring_target_to_missing_ring(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [bindings.g]
+        trigger = "BTN_TASK"
+        target = "ring:nonexistent"
+    """)
+    cfg = load_config(p)
+    import pytest
+    from logitechmouse.config import ConfigError, validate_config
+    with pytest.raises(ConfigError, match="binding 'g' references unknown ring 'nonexistent'"):
+        validate_config(cfg)
+
+
+def test_validate_passes_for_valid_ring_binding(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          { action = "shot", label = "A" },
+          { action = "shot", label = "B" },
+          { action = "shot", label = "C" },
+        ]
+
+        [bindings.g]
+        trigger = "BTN_TASK"
+        target = "ring:r"
+    """)
+    cfg = load_config(p)
+    from logitechmouse.config import validate_config
+    validate_config(cfg)  # should not raise

@@ -188,4 +188,9 @@ def validate_config(config: AppConfig) -> None:
                     f"binding {binding.name!r} references unknown action "
                     f"{binding.target.name!r}"
                 )
-        # binding.target.kind == "ring" is validated in Task 7 (a future task).
+        elif binding.target.kind == "ring":
+            if binding.target.name not in config.rings:
+                raise ConfigError(
+                    f"binding {binding.name!r} references unknown ring "
+                    f"{binding.target.name!r}"
+                )
