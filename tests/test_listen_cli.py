@@ -30,3 +30,79 @@ def test_listen_returns_error_when_config_has_no_bindings(tmp_path, caplog):
     assert any(
         "binding" in rec.message.lower() for rec in caplog.records
     ), f"expected an error mentioning bindings, got: {[r.message for r in caplog.records]}"
+
+
+from unittest.mock import MagicMock
+
+from logitechmouse.config import (
+    Action, AppConfig, Binding, Ring, Segment, Target,
+)
+from logitechmouse.cli.listen import dispatch_event
+
+
+def _cfg_with_action_and_ring():
+    return AppConfig(
+        actions={"a": Action(name="a", kind="command", command="true")},
+        rings={
+            "r": Ring(
+                name="r",
+                segments=[
+                    Segment(action="a", label="A"),
+                    Segment(action="a", label="B"),
+                    Segment(action="a", label="C"),
+                ],
+            )
+        },
+        bindings={
+            "act_btn": Binding(
+                name="act_btn", trigger="BTN_SIDE",
+                target=Target(kind="action", name="a"),
+            ),
+            "ring_btn": Binding(
+                name="ring_btn", trigger="BTN_TASK",
+                target=Target(kind="ring", name="r"),
+            ),
+        },
+    )
+
+
+def test_dispatch_action_target_on_keydown_runs_action():
+    cfg = _cfg_with_action_and_ring()
+    run_action = MagicMock()
+    rc = MagicMock()
+    dispatch_event(cfg, rc, run_action, trigger="BTN_SIDE", pressed=True, cursor_pos=(0, 0))
+    run_action.assert_called_once_with(cfg.actions["a"])
+    rc.open.assert_not_called()
+    rc.close.assert_not_called()
+
+
+def test_dispatch_action_target_on_keyup_does_nothing():
+    cfg = _cfg_with_action_and_ring()
+    run_action = MagicMock()
+    rc = MagicMock()
+    dispatch_event(cfg, rc, run_action, trigger="BTN_SIDE", pressed=False, cursor_pos=(0, 0))
+    run_action.assert_not_called()
+
+
+def test_dispatch_ring_target_on_keydown_opens():
+    cfg = _cfg_with_action_and_ring()
+    rc = MagicMock()
+    dispatch_event(cfg, rc, MagicMock(), trigger="BTN_TASK", pressed=True, cursor_pos=(100, 200))
+    rc.open.assert_called_once_with(cfg.rings["r"], cursor_pos=(100, 200))
+
+
+def test_dispatch_ring_target_on_keyup_closes():
+    cfg = _cfg_with_action_and_ring()
+    rc = MagicMock()
+    dispatch_event(cfg, rc, MagicMock(), trigger="BTN_TASK", pressed=False, cursor_pos=(0, 0))
+    rc.close.assert_called_once()
+
+
+def test_dispatch_unknown_trigger_is_noop():
+    cfg = _cfg_with_action_and_ring()
+    rc = MagicMock()
+    run_action = MagicMock()
+    dispatch_event(cfg, rc, run_action, trigger="BTN_NOT_BOUND", pressed=True, cursor_pos=(0, 0))
+    rc.open.assert_not_called()
+    rc.close.assert_not_called()
+    run_action.assert_not_called()
