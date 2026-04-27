@@ -194,3 +194,18 @@ def validate_config(config: AppConfig) -> None:
                     f"binding {binding.name!r} references unknown ring "
                     f"{binding.target.name!r}"
                 )
+    for ring in config.rings.values():
+        n = len(ring.segments)
+        if n < 3 or n > 12:
+            raise ConfigError(
+                f"ring {ring.name!r} must have between 3 and 12 segments, got {n}"
+            )
+        for i, seg in enumerate(ring.segments):
+            if not seg.label.strip():
+                raise ConfigError(
+                    f"rings.{ring.name}.segments[{i}].label is empty"
+                )
+            if seg.action not in config.actions:
+                raise ConfigError(
+                    f"rings.{ring.name}.segments[{i}].action {seg.action!r} not found"
+                )

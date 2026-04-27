@@ -207,3 +207,83 @@ def test_validate_passes_for_valid_ring_binding(tmp_path):
     cfg = load_config(p)
     from logitechmouse.config import validate_config
     validate_config(cfg)  # should not raise
+
+
+def test_validate_rejects_ring_with_too_few_segments(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          { action = "shot", label = "A" },
+          { action = "shot", label = "B" },
+        ]
+    """)
+    cfg = load_config(p)
+    import pytest
+    from logitechmouse.config import ConfigError, validate_config
+    with pytest.raises(ConfigError, match="ring 'r' must have between 3 and 12 segments"):
+        validate_config(cfg)
+
+
+def test_validate_rejects_ring_with_too_many_segments(tmp_path):
+    segs = ",\n          ".join(
+        '{ action = "shot", label = "X" }' for _ in range(13)
+    )
+    p = write_cfg(tmp_path, f"""
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          {segs}
+        ]
+    """)
+    cfg = load_config(p)
+    import pytest
+    from logitechmouse.config import ConfigError, validate_config
+    with pytest.raises(ConfigError, match="ring 'r' must have between 3 and 12 segments"):
+        validate_config(cfg)
+
+
+def test_validate_rejects_segment_with_unknown_action(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          { action = "shot", label = "A" },
+          { action = "shot", label = "B" },
+          { action = "missing", label = "C" },
+        ]
+    """)
+    cfg = load_config(p)
+    import pytest
+    from logitechmouse.config import ConfigError, validate_config
+    with pytest.raises(ConfigError, match=r"rings\.r\.segments\[2\]\.action 'missing' not found"):
+        validate_config(cfg)
+
+
+def test_validate_rejects_segment_with_blank_label(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          { action = "shot", label = "A" },
+          { action = "shot", label = "   " },
+          { action = "shot", label = "C" },
+        ]
+    """)
+    cfg = load_config(p)
+    import pytest
+    from logitechmouse.config import ConfigError, validate_config
+    with pytest.raises(ConfigError, match=r"rings\.r\.segments\[1\]\.label is empty"):
+        validate_config(cfg)
