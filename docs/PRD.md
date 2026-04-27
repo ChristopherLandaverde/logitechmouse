@@ -13,7 +13,7 @@ A Linux laptop or desktop user with a Logitech MX mouse who wants one-press prod
 - Bind MX mouse buttons to user-defined actions.
 - Support command execution and keyboard shortcut emission.
 - Make screenshots a first-class built-in workflow.
-- Provide a path toward an optional radial overlay.
+- Provide an optional radial overlay (Phase 4 — shipped).
 
 ## Non-goals
 
@@ -36,4 +36,5 @@ The MVP should:
 - a user can press one MX button and capture a screenshot
 - configuration changes do not require code edits
 - the system is modular enough to add overlay support later
+- pressing and holding a configured button opens a ring; releasing on a segment fires its action.
 
