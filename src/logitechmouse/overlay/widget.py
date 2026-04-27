@@ -13,10 +13,16 @@ from .geometry import is_in_dead_zone, shifted_center_for_screen, wedge_index
 
 
 # Visual constants — tunable later.
+# Spec §3.3 originally called for rgba(24, 24, 24, 0.85) translucent dark
+# with WA_TranslucentBackground. On the Mutter compositor (Pop!_OS / GNOME)
+# we tested on, that combination rendered as an invisible black square. We
+# ship opaque colors with WA_TranslucentBackground disabled in v1; theming
+# is a polish item (spec §2, §10).
 RING_OUTER_RADIUS = 180
 RING_DEAD_ZONE_RADIUS = 45
-BG_COLOR = QColor(24, 24, 24, int(0.85 * 255))
-ACTIVE_BG_COLOR = QColor(56, 56, 56, int(0.92 * 255))
+BG_COLOR = QColor(40, 40, 40, 255)
+ACTIVE_BG_COLOR = QColor(80, 80, 80, 255)
+DEAD_ZONE_COLOR = QColor(20, 20, 20, 255)
 SEPARATOR_COLOR = QColor(0, 0, 0, 200)
 LABEL_COLOR = QColor(230, 230, 230)
 CANCEL_COLOR = QColor(160, 160, 160)
@@ -34,7 +40,8 @@ class RingWidget(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool,
         )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground, True)
+        # WA_TranslucentBackground intentionally disabled — see BG_COLOR comment.
+        # When theming lands, gating this on a config flag is the next step.
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
 
         self._ring: Ring | None = None
@@ -71,9 +78,8 @@ class RingWidget(QWidget):
         self.show()
         self.raise_()
 
-        # 75 ms fade-in. Spec called for fade + scale; scale via fractional
-        # geometry produces visible jitter, so v1 ships fade-only. Scale
-        # animation is a polish item (see spec §10).
+        # 75 ms fade-in via window opacity (works on X11 even with
+        # WA_TranslucentBackground disabled — uses the WM composite path).
         self.setWindowOpacity(0.0)
         anim = QPropertyAnimation(self, b"windowOpacity", self)
         anim.setDuration(75)
@@ -134,7 +140,7 @@ class RingWidget(QWidget):
             p.drawText(int(lx - tw / 2), int(ly + th / 4), text)
 
         p.setPen(QPen(SEPARATOR_COLOR, 1))
-        p.setBrush(QColor(18, 18, 18, int(0.92 * 255)))
+        p.setBrush(DEAD_ZONE_COLOR)
         p.drawEllipse(QRectF(ox - inner, oy - inner, inner * 2, inner * 2))
 
         if self.is_in_dead_zone:

@@ -30,7 +30,12 @@ def test_widget_can_be_constructed_and_shown(qtbot, fake_ring):
     flags = w.windowFlags()
     assert flags & Qt.WindowType.FramelessWindowHint
     assert flags & Qt.WindowType.WindowStaysOnTopHint
-    assert w.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    # WA_TranslucentBackground is intentionally OFF in v1: it interacts badly
+    # with some compositors (Mutter on the dev hardware rendered the widget
+    # as an invisible black rect). Theming + opt-in transparency is a polish
+    # item — see widget.py BG_COLOR comment.
+    assert not w.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+    assert w.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     w.hide()
     assert not w.isVisible()
 
