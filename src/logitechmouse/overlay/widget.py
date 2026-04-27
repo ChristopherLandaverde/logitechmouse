@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 
-from PyQt6.QtCore import Qt, QPoint, QRectF
+from PyQt6.QtCore import Qt, QPoint, QRectF, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
 from PyQt6.QtWidgets import QWidget
 
@@ -41,6 +41,7 @@ class RingWidget(QWidget):
         self._center_x = 0
         self._center_y = 0
         self.active_segment_index = 0
+        self._open_animation: QPropertyAnimation | None = None
         self.is_in_dead_zone = True
 
     # --- public API consumed by RingController ---
@@ -69,6 +70,18 @@ class RingWidget(QWidget):
         self.update_cursor_position(*cursor_pos)
         self.show()
         self.raise_()
+
+        # 75 ms fade-in. Spec called for fade + scale; scale via fractional
+        # geometry produces visible jitter, so v1 ships fade-only. Scale
+        # animation is a polish item (see spec §10).
+        self.setWindowOpacity(0.0)
+        anim = QPropertyAnimation(self, b"windowOpacity", self)
+        anim.setDuration(75)
+        anim.setStartValue(0.0)
+        anim.setEndValue(1.0)
+        anim.setEasingCurve(QEasingCurve.Type.OutCubic)
+        anim.start()
+        self._open_animation = anim
 
     def update_cursor_position(self, cursor_x: int, cursor_y: int) -> None:
         if self._ring is None:

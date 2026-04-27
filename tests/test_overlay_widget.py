@@ -42,3 +42,13 @@ def test_widget_initial_state_no_segment_active(qtbot, fake_ring):
     w.show_at(fake_ring, cursor_pos=(500, 500))
     w.update_cursor_position(500, 500)
     assert w.is_in_dead_zone is True
+
+
+@pytest.mark.requires_display
+def test_widget_open_animation_runs_and_finishes_at_full_opacity(qtbot, fake_ring):
+    w = RingWidget()
+    qtbot.addWidget(w)
+    w.show_at(fake_ring, cursor_pos=(500, 500))
+    assert w._open_animation is not None  # type: ignore[attr-defined]
+    qtbot.wait(120)  # > 75 ms + slop
+    assert w.windowOpacity() == pytest.approx(1.0, abs=1e-3)
