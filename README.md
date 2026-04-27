@@ -109,6 +109,17 @@ pip install 'logitechmouse[ring]'
 Without `[ring]` you can still use action-only bindings; configs that define
 ring bindings will fail validation with a clear message.
 
+### Themes
+
+The ring ships with a dark default. A second palette is available via env var:
+
+```bash
+LOGITECHMOUSE_THEME=brazil logitechmouse listen
+```
+
+Themes today: `dark` (default), `brazil` (green/yellow/blue, bandeira do Brasil).
+Full theming via config is a polish phase; the env var is the v1 escape hatch.
+
 ## Documents
 
 - [Product Requirements](docs/PRD.md)

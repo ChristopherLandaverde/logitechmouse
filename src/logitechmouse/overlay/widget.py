@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+import os
 
 from PyQt6.QtCore import Qt, QPoint, QRectF, QPropertyAnimation, QEasingCurve
 from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen
@@ -20,12 +21,36 @@ from .geometry import is_in_dead_zone, shifted_center_for_screen, wedge_index
 # is a polish item (spec §2, §10).
 RING_OUTER_RADIUS = 180
 RING_DEAD_ZONE_RADIUS = 45
-BG_COLOR = QColor(40, 40, 40, 255)
-ACTIVE_BG_COLOR = QColor(80, 80, 80, 255)
-DEAD_ZONE_COLOR = QColor(20, 20, 20, 255)
 SEPARATOR_COLOR = QColor(0, 0, 0, 200)
-LABEL_COLOR = QColor(230, 230, 230)
-CANCEL_COLOR = QColor(160, 160, 160)
+
+# Themes. Keep these tiny — theming is a polish phase. Pick via
+# LOGITECHMOUSE_THEME=<name>; default is "dark".
+_THEMES = {
+    "dark": {
+        "bg": QColor(40, 40, 40, 255),
+        "active": QColor(80, 80, 80, 255),
+        "dead_zone": QColor(20, 20, 20, 255),
+        "label": QColor(230, 230, 230),
+        "cancel": QColor(160, 160, 160),
+    },
+    "brazil": {
+        # Bandeira do Brasil. Earned during the Phase 4 hardware test.
+        "bg": QColor(0, 156, 59, 255),       # green
+        "active": QColor(0, 39, 118, 255),    # blue
+        "dead_zone": QColor(255, 223, 0, 255), # yellow
+        "label": QColor(255, 255, 255),
+        "cancel": QColor(40, 40, 40),
+    },
+}
+
+_theme_name = os.environ.get("LOGITECHMOUSE_THEME", "dark").lower()
+_theme = _THEMES.get(_theme_name, _THEMES["dark"])
+
+BG_COLOR = _theme["bg"]
+ACTIVE_BG_COLOR = _theme["active"]
+DEAD_ZONE_COLOR = _theme["dead_zone"]
+LABEL_COLOR = _theme["label"]
+CANCEL_COLOR = _theme["cancel"]
 
 
 class RingWidget(QWidget):
