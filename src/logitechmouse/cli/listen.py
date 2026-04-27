@@ -47,8 +47,10 @@ def dispatch_event(
     elif binding.target.kind == "ring":
         ring = cfg.rings[binding.target.name]
         if pressed:
+            logging.info("ring open: %s at %s", ring.name, cursor_pos)
             ring_controller.open(ring, cursor_pos=cursor_pos)
         else:
+            logging.info("ring close: %s", ring.name)
             ring_controller.close()
 
 
@@ -120,7 +122,7 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
 def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     """Ring-enabled path: QApplication on main thread, listener on worker thread."""
     try:
-        from PyQt6.QtCore import QObject, QThread, pyqtSignal
+        from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal, pyqtSlot
         from PyQt6.QtGui import QCursor
         from PyQt6.QtWidgets import QApplication
     except ImportError:
@@ -144,34 +146,44 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     )
 
     class _ListenerWorker(QObject):
-        event_received = pyqtSignal(str, bool, int, int)
+        event_received = pyqtSignal(str, bool)
         finished = pyqtSignal(int)
 
         def run(self) -> None:
             try:
                 for ev in backend.read_loop(device):
-                    p = QCursor.pos()
-                    self.event_received.emit(ev.trigger, ev.pressed, p.x(), p.y())
+                    self.event_received.emit(ev.trigger, ev.pressed)
             except OSError as exc:
                 logging.warning("device read failed: %s", exc)
                 self.finished.emit(1)
                 return
             self.finished.emit(0)
 
+    class _MainBridge(QObject):
+        """Receives signals on the main thread and dispatches.
+
+        Wrapping the slot in a QObject that lives on the main thread forces
+        Qt to use a queued connection across threads, so ring_controller.open
+        and any QWidget operations always run on the main (GUI) thread.
+        """
+
+        @pyqtSlot(str, bool)
+        def on_event(self, trigger: str, pressed: bool) -> None:
+            p = QCursor.pos()  # safe: this slot runs on the main thread
+            dispatch_event(
+                cfg,
+                ring_controller=ring_controller,
+                run_action=_default_run_action,
+                trigger=trigger,
+                pressed=pressed,
+                cursor_pos=(p.x(), p.y()),
+            )
+
+    bridge = _MainBridge()  # parented to main thread by default
     worker = _ListenerWorker()
     thread = QThread()
     worker.moveToThread(thread)
     thread.started.connect(worker.run)
-
-    def _on_event(trigger: str, pressed: bool, cur_x: int, cur_y: int) -> None:
-        dispatch_event(
-            cfg,
-            ring_controller=ring_controller,
-            run_action=_default_run_action,
-            trigger=trigger,
-            pressed=pressed,
-            cursor_pos=(cur_x, cur_y),
-        )
 
     return_code = {"value": 0}
 
@@ -180,8 +192,10 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         thread.quit()
         app.quit()
 
-    worker.event_received.connect(_on_event)
-    worker.finished.connect(_on_finished)
+    worker.event_received.connect(
+        bridge.on_event, Qt.ConnectionType.QueuedConnection
+    )
+    worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
 
     app.exec()
