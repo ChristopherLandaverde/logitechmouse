@@ -17,6 +17,19 @@ def run(args: argparse.Namespace) -> int:
         logging.error("could not load config: %s", exc)
         return 1
 
+    needs_pyqt6 = any(
+        b.target.kind == "ring" for b in cfg.bindings.values()
+    )
+    if needs_pyqt6:
+        try:
+            import PyQt6.QtWidgets  # noqa: F401
+        except ImportError:
+            logging.error(
+                "config defines ring bindings but PyQt6 is not installed; "
+                "install with: pip install 'logitechmouse[ring]'"
+            )
+            return 1
+
     if getattr(args, "device", None):
         cfg.device.path = args.device
 

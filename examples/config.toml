@@ -3,22 +3,51 @@
 # name = "MX Master"
 # path = "/dev/input/event7"
 
-[actions.screenshot]
-type = "command"
+# --- Actions: named units of work the system can run.
+# These default to gnome-screenshot which is NOT installed everywhere.
+# Swap to flameshot, scrot, or notify-send (for testing) to suit your env.
+[actions.screenshot_area]
+type    = "command"
 command = "gnome-screenshot -a"
 
-[actions.fullscreen]
-type = "command"
+[actions.screenshot_full]
+type    = "command"
 command = "gnome-screenshot"
 
-# BTN_TASK is the MX gesture button (under the thumb). It has no default
-# OS action, so binding it does not double-fire with browser navigation.
+[actions.lock]
+type    = "command"
+command = "loginctl lock-session"
+
+[actions.terminal]
+type    = "command"
+command = "gnome-terminal"
+
+# --- Rings: a radial overlay of segments. Each segment fires an action
+# on release outside the dead zone. Releasing in the dead zone cancels.
+[rings.thumb_ring]
+# 3 to 12 segments. Drawn clockwise starting at 12 o'clock.
+segments = [
+  { action = "screenshot_area",  label = "Area"     },
+  { action = "screenshot_full",  label = "Full"     },
+  { action = "lock",             label = "Lock"     },
+  { action = "terminal",         label = "Terminal" },
+]
+
+# --- Bindings: physical button → target. Targets are either
+# "action:NAME" (fire on press) or "ring:NAME" (open on press / fire on release).
+# Legacy form `action = "NAME"` is still accepted but logs a deprecation note.
+#
+# IMPORTANT: many MX models do not emit BTN_TASK on the gesture button despite
+# advertising the capability — verified on the dev hardware via
+# scripts/dump-keys.py. If your hold of BTN_TASK does nothing, run
+# `./scripts/dump-keys.py /dev/input/eventNN` to see what your MX actually
+# emits, and substitute that code below. BTN_SIDE / BTN_EXTRA are common
+# fallbacks; they dual-fire with browser back/forward (no device grabbing
+# in v1) but the ring will still open and fire its segment.
 [bindings.gesture_button]
 trigger = "BTN_TASK"
-action = "screenshot"
+target  = "ring:thumb_ring"
 
-# BTN_SIDE / BTN_EXTRA double-fire with browser back / forward in this MVP
-# (no device grabbing yet). Bind them only if you accept that overlap.
 [bindings.thumb_button]
 trigger = "BTN_SIDE"
-action = "fullscreen"
+target  = "action:screenshot_area"

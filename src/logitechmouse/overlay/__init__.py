@@ -6,4 +6,3 @@ class OverlayLauncher:
 
     def open(self) -> str:
         return "overlay not implemented"
-

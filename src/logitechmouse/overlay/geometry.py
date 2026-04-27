@@ -1,0 +1,58 @@
+"""Pure geometry for the Actions Ring. No Qt imports."""
+
+from __future__ import annotations
+
+import math
+
+
+def wedge_index(dx: float, dy: float, n: int) -> int:
+    """Return the wedge index in [0, n) for a cursor offset from ring center.
+
+    Convention: wedge 0 is centered at 12 o'clock (straight up). Wedges
+    proceed clockwise. dx is right-positive, dy is down-positive (Qt screen
+    coords). N must be >= 1.
+
+    The cursor position relative to the ring center is converted to an angle
+    in degrees clockwise from up; that angle, offset by half a wedge so that
+    each wedge straddles its center direction, is divided by the wedge size.
+    """
+    if n < 1:
+        raise ValueError(f"wedge_index requires n >= 1, got {n}")
+    # angle in radians, math convention (CCW from +x). atan2(dy, dx) with
+    # screen-down dy gives angle CCW from +x in screen space — for our
+    # convention we want CW from +y-up, which is equivalent to (90 - math_angle)
+    # mod 360 with sign flips. Easiest: convert (dx, dy) directly.
+    #
+    # CW-from-up angle = atan2(dx, -dy)
+    angle_rad = math.atan2(dx, -dy)
+    angle_deg = math.degrees(angle_rad) % 360.0
+    wedge_size = 360.0 / n
+    shifted = (angle_deg + wedge_size / 2.0) % 360.0
+    return int(shifted // wedge_size) % n
+
+
+def is_in_dead_zone(dx: float, dy: float, dead_zone_radius: float) -> bool:
+    """Return True if (dx, dy) is strictly inside the dead-zone disc.
+
+    Boundary is exclusive: at exactly `dead_zone_radius`, the cursor is
+    treated as outside the dead zone.
+    """
+    return math.hypot(dx, dy) < dead_zone_radius
+
+
+def shifted_center_for_screen(
+    cursor_x: int,
+    cursor_y: int,
+    screen_left: int,
+    screen_top: int,
+    screen_right: int,
+    screen_bottom: int,
+    ring_radius: int,
+) -> tuple[int, int]:
+    """Return the ring center such that a circle of `ring_radius` is fully
+    inside the given screen rectangle. Defaults to the cursor; shifts inward
+    only as needed. The cursor itself is never moved.
+    """
+    cx = max(screen_left + ring_radius, min(cursor_x, screen_right - ring_radius))
+    cy = max(screen_top + ring_radius, min(cursor_y, screen_bottom - ring_radius))
+    return cx, cy

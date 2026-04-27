@@ -78,7 +78,8 @@ class CandidateDevice:
 
 @dataclass
 class InputEvent:
-    trigger: str  # evdev key code name, e.g. "BTN_TASK"
+    trigger: str        # evdev key code name, e.g. "BTN_TASK"
+    pressed: bool       # True for key-down, False for key-up
 
 
 class EvdevBackend:
@@ -185,11 +186,12 @@ class EvdevBackend:
         return best_dev
 
     def read_loop(self, device: InputDevice) -> Iterator[InputEvent]:
-        """Yield InputEvent for every key-down on `device`. Blocking."""
+        """Yield InputEvent for every key-down (pressed=True) and key-up
+        (pressed=False) on `device`. Ignores key-repeat (value=2). Blocking."""
         for event in device.read_loop():
             if event.type != ecodes.EV_KEY:
                 continue
-            if event.value != 1:
+            if event.value not in (0, 1):
                 continue
             key_event = categorize(event)
             keycode = key_event.keycode
@@ -201,4 +203,4 @@ class EvdevBackend:
                 name = None
             if not name:
                 continue
-            yield InputEvent(trigger=name)
+            yield InputEvent(trigger=name, pressed=(event.value == 1))
