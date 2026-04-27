@@ -120,3 +120,19 @@ def test_action_dispatch_failure_does_not_break_controller(fake_ring, actions):
     rc.close()
     assert rc.state == RingState.IDLE
     widget.hide.assert_called_once()
+
+
+def test_open_starts_cursor_polling_close_stops_it(fake_ring, actions):
+    widget = MagicMock()
+    widget.is_in_dead_zone = True
+    poller = MagicMock()
+    rc = RingController(
+        widget_factory=lambda: widget,
+        run_action=MagicMock(),
+        actions=actions,
+        cursor_poller_factory=lambda cb: poller,
+    )
+    rc.open(fake_ring, cursor_pos=(0, 0))
+    poller.start.assert_called_once()
+    rc.close()
+    poller.stop.assert_called_once()
