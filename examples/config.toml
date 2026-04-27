@@ -4,6 +4,8 @@
 # path = "/dev/input/event7"
 
 # --- Actions: named units of work the system can run.
+# These default to gnome-screenshot which is NOT installed everywhere.
+# Swap to flameshot, scrot, or notify-send (for testing) to suit your env.
 [actions.screenshot_area]
 type    = "command"
 command = "gnome-screenshot -a"
@@ -34,6 +36,14 @@ segments = [
 # --- Bindings: physical button → target. Targets are either
 # "action:NAME" (fire on press) or "ring:NAME" (open on press / fire on release).
 # Legacy form `action = "NAME"` is still accepted but logs a deprecation note.
+#
+# IMPORTANT: many MX models do not emit BTN_TASK on the gesture button despite
+# advertising the capability — verified on the dev hardware via
+# scripts/dump-keys.py. If your hold of BTN_TASK does nothing, run
+# `./scripts/dump-keys.py /dev/input/eventNN` to see what your MX actually
+# emits, and substitute that code below. BTN_SIDE / BTN_EXTRA are common
+# fallbacks; they dual-fire with browser back/forward (no device grabbing
+# in v1) but the ring will still open and fire its segment.
 [bindings.gesture_button]
 trigger = "BTN_TASK"
 target  = "ring:thumb_ring"
