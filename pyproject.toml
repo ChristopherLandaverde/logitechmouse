@@ -38,4 +38,5 @@ testpaths = ["tests"]
 addopts = "-ra"
 markers = [
   "requires_display: skipped when DISPLAY env var is unset (Qt widget tests)",
+  "requires_uinput: skipped when /dev/uinput is not writable (grab integration tests)",
 ]
