@@ -62,6 +62,10 @@ def run(args: argparse.Namespace) -> int:
             binding = bindings_by_trigger.get(event.trigger)
             if binding is None:
                 continue
+            if not event.pressed:
+                # Key-up does not fire action targets. Ring targets are
+                # wired in a later task; this branch will route there.
+                continue
             if binding.target.kind != "action":
                 # Ring targets are wired in a later task; skip silently for now.
                 continue
