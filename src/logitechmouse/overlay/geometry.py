@@ -29,3 +29,12 @@ def wedge_index(dx: float, dy: float, n: int) -> int:
     wedge_size = 360.0 / n
     shifted = (angle_deg + wedge_size / 2.0) % 360.0
     return int(shifted // wedge_size) % n
+
+
+def is_in_dead_zone(dx: float, dy: float, dead_zone_radius: float) -> bool:
+    """Return True if (dx, dy) is strictly inside the dead-zone disc.
+
+    Boundary is exclusive: at exactly `dead_zone_radius`, the cursor is
+    treated as outside the dead zone.
+    """
+    return math.hypot(dx, dy) < dead_zone_radius

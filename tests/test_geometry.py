@@ -48,3 +48,23 @@ def test_wedge_index_wraps_at_full_circle():
     dx = math.sin(angle) * 100
     dy = -math.cos(angle) * 100
     assert wedge_index(dx, dy, 8) == 0
+
+
+from logitechmouse.overlay.geometry import is_in_dead_zone
+
+
+def test_in_dead_zone_when_within_radius():
+    assert is_in_dead_zone(dx=10, dy=10, dead_zone_radius=45) is True
+
+
+def test_outside_dead_zone_when_beyond_radius():
+    assert is_in_dead_zone(dx=50, dy=0, dead_zone_radius=45) is False
+
+
+def test_at_exact_dead_zone_radius_is_outside():
+    """Boundary is exclusive — at radius, you are out."""
+    assert is_in_dead_zone(dx=45, dy=0, dead_zone_radius=45) is False
+
+
+def test_at_origin_is_in_dead_zone():
+    assert is_in_dead_zone(dx=0, dy=0, dead_zone_radius=45) is True
