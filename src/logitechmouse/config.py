@@ -51,6 +51,19 @@ def parse_target_string(raw: str) -> "Target":
     return Target(kind=kind, name=name)
 
 
+@dataclass
+class Segment:
+    action: str           # references actions[name]
+    label: str
+    icon: str | None = None
+
+
+@dataclass
+class Ring:
+    name: str
+    segments: list[Segment]
+
+
 def _parse_binding(name: str, data: dict) -> "Binding":
     has_target = "target" in data
     has_action = "action" in data
@@ -84,6 +97,33 @@ class Binding:
     target: Target
 
 
+def _parse_ring(name: str, data: dict) -> Ring:
+    raw_segments = data.get("segments")
+    if raw_segments is None:
+        raise ConfigError(f"ring {name!r} missing 'segments' list")
+    if not isinstance(raw_segments, list):
+        raise ConfigError(f"ring {name!r}: 'segments' must be a list")
+    segments: list[Segment] = []
+    for i, seg in enumerate(raw_segments):
+        if not isinstance(seg, dict):
+            raise ConfigError(
+                f"ring {name!r}.segments[{i}] must be an inline table"
+            )
+        if "action" not in seg:
+            raise ConfigError(f"ring {name!r}.segments[{i}] missing 'action'")
+        if "label" not in seg:
+            raise ConfigError(f"ring {name!r}.segments[{i}] missing 'label'")
+        icon = seg.get("icon")
+        if icon is not None and (not isinstance(icon, str) or not icon):
+            raise ConfigError(
+                f"ring {name!r}.segments[{i}] icon must be a non-empty string"
+            )
+        segments.append(
+            Segment(action=seg["action"], label=seg["label"], icon=icon)
+        )
+    return Ring(name=name, segments=segments)
+
+
 @dataclass
 class DeviceConfig:
     name: str | None = None
@@ -94,6 +134,7 @@ class DeviceConfig:
 class AppConfig:
     actions: dict[str, Action] = field(default_factory=dict)
     bindings: dict[str, Binding] = field(default_factory=dict)
+    rings: dict[str, Ring] = field(default_factory=dict)
     device: DeviceConfig = field(default_factory=DeviceConfig)
 
 
@@ -117,13 +158,17 @@ def load_config(path: Path | None = None) -> AppConfig:
         name: _parse_binding(name, data)
         for name, data in raw.get("bindings", {}).items()
     }
+    rings = {
+        name: _parse_ring(name, data)
+        for name, data in raw.get("rings", {}).items()
+    }
     raw_device = raw.get("device", {}) or {}
     device = DeviceConfig(
         name=raw_device.get("name"),
         path=raw_device.get("path"),
     )
 
-    return AppConfig(actions=actions, bindings=bindings, device=device)
+    return AppConfig(actions=actions, bindings=bindings, rings=rings, device=device)
 
 
 def validate_config(config: AppConfig) -> None:

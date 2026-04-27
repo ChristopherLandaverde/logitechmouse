@@ -109,3 +109,62 @@ def test_neither_target_nor_action_is_error(tmp_path):
     from logitechmouse.config import ConfigError
     with pytest.raises(ConfigError, match="must specify 'target'"):
         load_config(p)
+
+
+def test_parses_ring_with_segments(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "gnome-screenshot -a"
+
+        [actions.full]
+        type = "command"
+        command = "gnome-screenshot"
+
+        [actions.lock]
+        type = "command"
+        command = "loginctl lock-session"
+
+        [rings.thumb]
+        segments = [
+          { action = "shot", label = "Area" },
+          { action = "full", label = "Full" },
+          { action = "lock", label = "Lock" },
+        ]
+    """)
+    cfg = load_config(p)
+    assert "thumb" in cfg.rings
+    ring = cfg.rings["thumb"]
+    assert ring.name == "thumb"
+    assert len(ring.segments) == 3
+    assert ring.segments[0].action == "shot"
+    assert ring.segments[0].label == "Area"
+    assert ring.segments[0].icon is None
+
+
+def test_parses_ring_segment_with_icon(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+
+        [rings.r]
+        segments = [
+          { action = "shot", label = "S", icon = "camera-photo" },
+          { action = "shot", label = "S2" },
+          { action = "shot", label = "S3" },
+        ]
+    """)
+    cfg = load_config(p)
+    assert cfg.rings["r"].segments[0].icon == "camera-photo"
+    assert cfg.rings["r"].segments[1].icon is None
+
+
+def test_no_rings_section_yields_empty_dict(tmp_path):
+    p = write_cfg(tmp_path, """
+        [actions.shot]
+        type = "command"
+        command = "true"
+    """)
+    cfg = load_config(p)
+    assert cfg.rings == {}
