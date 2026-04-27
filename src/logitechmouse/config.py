@@ -14,11 +14,40 @@ from evdev import ecodes
 DEFAULT_CONFIG_PATH = Path.home() / ".config" / "logitechmouse" / "config.toml"
 
 
+class ConfigError(Exception):
+    """Raised when a loaded config fails validation."""
+
+
 @dataclass
 class Action:
     name: str
     kind: str
     command: str | None = None
+
+
+_VALID_TARGET_KINDS = ("action", "ring")
+
+
+@dataclass(frozen=True)
+class Target:
+    kind: str   # "action" or "ring"
+    name: str
+
+
+def parse_target_string(raw: str) -> "Target":
+    if ":" not in raw:
+        raise ConfigError(
+            f"target {raw!r} must be 'kind:name' (e.g. 'action:screenshot')"
+        )
+    kind, _, name = raw.partition(":")
+    if kind not in _VALID_TARGET_KINDS:
+        raise ConfigError(
+            f"unknown target kind {kind!r} in {raw!r}; expected one of "
+            + ", ".join(_VALID_TARGET_KINDS)
+        )
+    if not name:
+        raise ConfigError(f"target {raw!r} has empty name after the ':'")
+    return Target(kind=kind, name=name)
 
 
 @dataclass
@@ -72,10 +101,6 @@ def load_config(path: Path | None = None) -> AppConfig:
     )
 
     return AppConfig(actions=actions, bindings=bindings, device=device)
-
-
-class ConfigError(Exception):
-    """Raised when a loaded config fails validation."""
 
 
 def validate_config(config: AppConfig) -> None:
