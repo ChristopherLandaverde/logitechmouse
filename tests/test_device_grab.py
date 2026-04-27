@@ -106,3 +106,75 @@ def test_virtual_device_write_event_after_close_is_silent():
     v.write_event(raw)  # must not raise
     fake_ui.write.assert_not_called()
     fake_ui.syn.assert_not_called()
+
+
+from evdev import InputDevice
+
+from logitechmouse.device_grab import try_grab
+
+
+def _fake_real_dev():
+    dev = MagicMock(spec=InputDevice)
+    dev.capabilities.return_value = _fake_caps()
+    dev.path = "/dev/input/event99"
+    dev.name = "fake mouse"
+    return dev
+
+
+def test_try_grab_happy_path_returns_virtual_device_and_grabs_real():
+    fake_ui = MagicMock()
+    real = _fake_real_dev()
+    with patch("logitechmouse.device_grab.UInput", return_value=fake_ui):
+        v = try_grab(real)
+    assert isinstance(v, VirtualDevice)
+    real.grab.assert_called_once_with()
+
+
+def test_try_grab_returns_none_when_uinput_missing(caplog):
+    real = _fake_real_dev()
+    with patch(
+        "logitechmouse.device_grab.UInput",
+        side_effect=FileNotFoundError("/dev/uinput"),
+    ):
+        with caplog.at_level("WARNING"):
+            v = try_grab(real)
+    assert v is None
+    real.grab.assert_not_called()
+    assert any("uinput" in rec.message.lower() for rec in caplog.records)
+
+
+def test_try_grab_returns_none_when_uinput_perm_denied(caplog):
+    real = _fake_real_dev()
+    with patch(
+        "logitechmouse.device_grab.UInput",
+        side_effect=PermissionError("/dev/uinput"),
+    ):
+        with caplog.at_level("WARNING"):
+            v = try_grab(real)
+    assert v is None
+    real.grab.assert_not_called()
+    assert any("permission" in rec.message.lower() for rec in caplog.records)
+
+
+def test_try_grab_returns_none_when_real_device_already_grabbed(caplog):
+    real = _fake_real_dev()
+    real.grab.side_effect = OSError("already grabbed")
+    fake_ui = MagicMock()
+    with patch("logitechmouse.device_grab.UInput", return_value=fake_ui):
+        with caplog.at_level("WARNING"):
+            v = try_grab(real)
+    assert v is None
+    fake_ui.close.assert_called_once_with()  # virtual device cleaned up
+
+
+def test_try_grab_warning_mentions_dual_fire_remediation(caplog):
+    """The warning must point users at the docs so the fallback is debuggable."""
+    real = _fake_real_dev()
+    with patch(
+        "logitechmouse.device_grab.UInput",
+        side_effect=FileNotFoundError("/dev/uinput"),
+    ):
+        with caplog.at_level("WARNING"):
+            try_grab(real)
+    msg = " ".join(rec.message for rec in caplog.records).lower()
+    assert "dual" in msg or "fire twice" in msg or "troubleshooting" in msg

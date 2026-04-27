@@ -76,3 +76,59 @@ class VirtualDevice:
 
     def __exit__(self, exc_type, exc, tb) -> None:
         self.close()
+
+
+def try_grab(real_dev: InputDevice) -> "VirtualDevice | None":
+    """Build a virtual mirror, grab the real device, return the mirror.
+
+    Returns None (and logs one WARNING) when:
+      - /dev/uinput is missing (FileNotFoundError)
+      - the user lacks write permission on /dev/uinput (PermissionError)
+      - the real device is already grabbed by another process (OSError)
+
+    Callers must treat None as "grab disabled, dual-fire possible" and
+    proceed without forwarding.
+    """
+    try:
+        caps = real_dev.capabilities()
+    except (OSError, AttributeError) as exc:
+        logger.warning(
+            "could not read capabilities of %s (%s); device grab disabled, "
+            "bound buttons may fire twice in focused apps. See README "
+            "Troubleshooting → buttons fire twice.",
+            getattr(real_dev, "path", "?"),
+            exc,
+        )
+        return None
+
+    try:
+        virt = VirtualDevice(caps)
+    except FileNotFoundError:
+        logger.warning(
+            "/dev/uinput not present; device grab disabled, bound buttons "
+            "may fire twice in focused apps. See README Troubleshooting → "
+            "buttons fire twice."
+        )
+        return None
+    except PermissionError:
+        logger.warning(
+            "/dev/uinput exists but permission denied for this user; device "
+            "grab disabled, bound buttons may fire twice in focused apps. "
+            "See README Troubleshooting → buttons fire twice."
+        )
+        return None
+
+    try:
+        real_dev.grab()
+    except OSError as exc:
+        logger.warning(
+            "could not grab %s (%s); another process may already hold it. "
+            "Device grab disabled, bound buttons may fire twice. See README "
+            "Troubleshooting → buttons fire twice.",
+            getattr(real_dev, "path", "?"),
+            exc,
+        )
+        virt.close()
+        return None
+
+    return virt
