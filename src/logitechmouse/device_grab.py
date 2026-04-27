@@ -31,3 +31,44 @@ def _filter_capabilities(caps: dict[int, Iterable[int]]) -> dict[int, list[int]]
             continue
         out[ev_type] = codes_list
     return out
+
+
+class VirtualDevice:
+    """Thin wrapper around evdev.UInput.
+
+    Mirrors a real device's capabilities so the kernel exposes a virtual
+    mouse that forwarded events can be written to. Owns lifetime of the
+    underlying UInput; safe to close more than once.
+    """
+
+    DEFAULT_NAME = "logitechmouse virtual"
+
+    def __init__(self, caps: dict[int, Iterable[int]], name: str = DEFAULT_NAME) -> None:
+        filtered = _filter_capabilities(caps)
+        self._ui = UInput(filtered, name=name)
+        self._closed = False
+
+    def write_event(self, event) -> None:
+        """Forward a raw evdev InputEvent to the virtual device.
+
+        EV_SYN is mapped to UInput.syn() so frame boundaries are preserved.
+        Everything else goes through UInput.write(type, code, value).
+        """
+        if event.type == ecodes.EV_SYN:
+            self._ui.syn()
+        else:
+            self._ui.write(event.type, event.code, event.value)
+
+    def close(self) -> None:
+        if self._closed:
+            return
+        try:
+            self._ui.close()
+        finally:
+            self._closed = True
+
+    def __enter__(self) -> "VirtualDevice":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> None:
+        self.close()
