@@ -54,3 +54,20 @@ target  = "ring:thumb_ring"
 [bindings.thumb_button]
 trigger = "BTN_SIDE"
 target  = "action:screenshot_area"
+
+# --- App-specific profiles: override bindings when a particular app is focused.
+#
+# match_wm_class is a case-insensitive substring matched against the WM_CLASS
+# of the focused window (queried via xdotool on each button press).
+# The first matching profile wins; unmatched triggers fall back to global bindings.
+#
+# Requires xdotool: sudo apt install xdotool
+#
+# Example: open a developer ring instead of the default ring when Firefox is active.
+
+# [profiles.firefox]
+# match_wm_class = "firefox"
+#
+# [profiles.firefox.bindings.gesture_button]
+# trigger = "BTN_TASK"
+# target  = "ring:dev_ring"   # dev_ring must be defined in [rings.*]

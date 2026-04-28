@@ -9,7 +9,7 @@ from contextlib import contextmanager
 from typing import Callable
 
 from ..actions import run_action as _default_run_action
-from ..config import AppConfig, ConfigError, load_config, validate_config
+from ..config import AppConfig, Profile, ConfigError, load_config, validate_config
 from ..device import (
     DeviceNotFoundError,
     DeviceUnreadableError,
@@ -50,6 +50,16 @@ REMEDIATION = (
 )
 
 
+def _active_profile(cfg: AppConfig, wm_class: str | None) -> Profile | None:
+    if not wm_class or not cfg.profiles:
+        return None
+    wm_lower = wm_class.lower()
+    return next(
+        (p for p in cfg.profiles.values() if p.match_wm_class.lower() in wm_lower),
+        None,
+    )
+
+
 def dispatch_event(
     cfg: AppConfig,
     ring_controller,
@@ -57,12 +67,19 @@ def dispatch_event(
     trigger: str,
     pressed: bool,
     cursor_pos: tuple[int, int],
+    active_wm_class: str | None = None,
 ) -> None:
     """Pure dispatch logic — testable without Qt or threads."""
-    binding = next(
-        (b for b in cfg.bindings.values() if b.trigger == trigger),
-        None,
-    )
+    profile = _active_profile(cfg, active_wm_class)
+    binding = None
+    if profile:
+        binding = next(
+            (b for b in profile.bindings.values() if b.trigger == trigger), None
+        )
+    if binding is None:
+        binding = next(
+            (b for b in cfg.bindings.values() if b.trigger == trigger), None
+        )
     if binding is None:
         return
     if binding.target.kind == "action":
@@ -84,14 +101,23 @@ def dispatch_event(
 
 
 def _has_ring_bindings(cfg: AppConfig) -> bool:
-    return any(b.target.kind == "ring" for b in cfg.bindings.values())
+    if any(b.target.kind == "ring" for b in cfg.bindings.values()):
+        return True
+    return any(
+        b.target.kind == "ring"
+        for p in cfg.profiles.values()
+        for b in p.bindings.values()
+    )
 
 
 def _build_swallow_codes(cfg: AppConfig) -> set[int]:
     from evdev import ecodes
+    all_bindings = list(cfg.bindings.values())
+    for profile in cfg.profiles.values():
+        all_bindings.extend(profile.bindings.values())
     return {
         ecodes.ecodes[b.trigger]
-        for b in cfg.bindings.values()
+        for b in all_bindings
         if b.trigger in ecodes.ecodes
     }
 
@@ -132,6 +158,11 @@ def run(args: argparse.Namespace) -> int:
     ) or "(none)"
     logging.info("listening on %s (%s)", device.path, device.name)
     logging.info("bindings: %s", summary)
+    if cfg.profiles:
+        logging.info(
+            "profiles: %s",
+            ", ".join(f"{p.name}[{p.match_wm_class}]" for p in cfg.profiles.values()),
+        )
 
     if _has_ring_bindings(cfg):
         return _run_with_qt(cfg, backend, device)
@@ -198,6 +229,7 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     from ..overlay.ring import RingController
     from ..overlay.widget import RingWidget
     from ..overlay.cursor import CursorPoller
+    from ..x11 import active_wm_class as _get_wm_class
 
     swallow_codes = _build_swallow_codes(cfg)
     virt = try_grab(device)
@@ -243,6 +275,7 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         @pyqtSlot(str, bool)
         def on_event(self, trigger: str, pressed: bool) -> None:
             p = QCursor.pos()  # safe: this slot runs on the main thread
+            wm_class = _get_wm_class() if pressed else None
             dispatch_event(
                 cfg,
                 ring_controller=ring_controller,
@@ -250,6 +283,7 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
                 trigger=trigger,
                 pressed=pressed,
                 cursor_pos=(p.x(), p.y()),
+                active_wm_class=wm_class,
             )
 
     bridge = _MainBridge()  # parented to main thread by default

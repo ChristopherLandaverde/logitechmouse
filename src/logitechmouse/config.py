@@ -97,6 +97,13 @@ class Binding:
     target: Target
 
 
+@dataclass
+class Profile:
+    name: str
+    match_wm_class: str
+    bindings: dict[str, Binding] = field(default_factory=dict)
+
+
 def _parse_ring(name: str, data: dict) -> Ring:
     raw_segments = data.get("segments")
     if raw_segments is None:
@@ -136,6 +143,7 @@ class AppConfig:
     bindings: dict[str, Binding] = field(default_factory=dict)
     rings: dict[str, Ring] = field(default_factory=dict)
     device: DeviceConfig = field(default_factory=DeviceConfig)
+    profiles: dict[str, Profile] = field(default_factory=dict)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -168,7 +176,20 @@ def load_config(path: Path | None = None) -> AppConfig:
         path=raw_device.get("path"),
     )
 
-    return AppConfig(actions=actions, bindings=bindings, rings=rings, device=device)
+    profiles: dict[str, Profile] = {}
+    for pname, pdata in raw.get("profiles", {}).items():
+        match_wm = pdata.get("match_wm_class", "")
+        if not match_wm:
+            raise ConfigError(f"profile {pname!r} missing 'match_wm_class'")
+        profile_bindings = {
+            bname: _parse_binding(bname, bdata)
+            for bname, bdata in pdata.get("bindings", {}).items()
+        }
+        profiles[pname] = Profile(
+            name=pname, match_wm_class=match_wm, bindings=profile_bindings
+        )
+
+    return AppConfig(actions=actions, bindings=bindings, rings=rings, device=device, profiles=profiles)
 
 
 def validate_config(config: AppConfig) -> None:
@@ -208,4 +229,21 @@ def validate_config(config: AppConfig) -> None:
             if seg.action not in config.actions:
                 raise ConfigError(
                     f"rings.{ring.name}.segments[{i}].action {seg.action!r} not found"
+                )
+    for profile in config.profiles.values():
+        for binding in profile.bindings.values():
+            if binding.trigger not in ecodes.ecodes:
+                raise ConfigError(
+                    f"profile {profile.name!r} binding {binding.name!r} "
+                    f"has unknown trigger {binding.trigger!r}"
+                )
+            if binding.target.kind == "action" and binding.target.name not in config.actions:
+                raise ConfigError(
+                    f"profile {profile.name!r} binding {binding.name!r} "
+                    f"references unknown action {binding.target.name!r}"
+                )
+            elif binding.target.kind == "ring" and binding.target.name not in config.rings:
+                raise ConfigError(
+                    f"profile {profile.name!r} binding {binding.name!r} "
+                    f"references unknown ring {binding.target.name!r}"
                 )
