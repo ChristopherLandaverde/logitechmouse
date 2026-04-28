@@ -227,9 +227,11 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         return 1
 
     from ..overlay.ring import RingController
-    from ..overlay.widget import RingWidget
+    from ..overlay.widget import RingWidget, apply_theme
     from ..overlay.cursor import CursorPoller
     from ..x11 import active_wm_class as _get_wm_class
+
+    apply_theme(name=cfg.theme.name, overrides=cfg.theme.overrides)
 
     swallow_codes = _build_swallow_codes(cfg)
     virt = try_grab(device)

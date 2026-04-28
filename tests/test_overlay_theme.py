@@ -58,6 +58,56 @@ def test_unknown_theme_falls_back_to_dark():
     assert widget._theme["dead_zone"].red() == 6
 
 
+@pytest.mark.requires_display
+def test_apply_theme_swaps_palette():
+    widget = _reload_widget(None)
+    widget.apply_theme(name="brazil")
+    assert widget._theme["dead_zone"].red() == 255
+    assert widget._theme["dead_zone"].green() == 223
+    widget.apply_theme(name="dark")
+    assert widget._theme["dead_zone"].red() == 6
+
+
+@pytest.mark.requires_display
+def test_apply_theme_with_overrides_replaces_specific_keys():
+    widget = _reload_widget(None)
+    widget.apply_theme(
+        name="dark",
+        overrides={"bubble_active": "#ffdf00", "center_label": "#002776"},
+    )
+    # Override took.
+    assert widget._theme["bubble_active"].red() == 255
+    assert widget._theme["bubble_active"].green() == 223
+    assert widget._theme["center_label"].blue() == 118
+    # Non-overridden key still comes from dark preset.
+    assert widget._theme["dead_zone"].red() == 6
+
+
+@pytest.mark.requires_display
+def test_apply_theme_overrides_do_not_leak_into_preset_table():
+    widget = _reload_widget(None)
+    widget.apply_theme(name="dark", overrides={"bubble_active": "#ff0000"})
+    # The shared _THEMES["dark"] entry must not have been mutated.
+    assert widget._THEMES["dark"]["bubble_active"].red() != 255 or \
+        widget._THEMES["dark"]["bubble_active"].green() != 0
+
+
+@pytest.mark.requires_display
+def test_env_var_overrides_apply_theme_name():
+    """Env var is the testing escape hatch — it must beat the TOML-derived name
+    that the CLI passes to apply_theme()."""
+    widget = _reload_widget("brazil")
+    widget.apply_theme(name="dark")  # CLI says dark, env says brazil
+    assert widget._theme["dead_zone"].red() == 255  # brazil wins
+
+
+@pytest.mark.requires_display
+def test_apply_theme_with_8_digit_hex_uses_alpha():
+    widget = _reload_widget(None)
+    widget.apply_theme(name="dark", overrides={"bubble": "#ffdf0080"})
+    assert widget._theme["bubble"].alpha() == 0x80
+
+
 @pytest.fixture(autouse=True)
 def _restore_default_theme_after_test():
     yield

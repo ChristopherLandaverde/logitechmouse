@@ -50,8 +50,33 @@ _THEMES: dict[str, dict[str, QColor]] = {
     },
 }
 
-_theme_name = os.environ.get("LOGITECHMOUSE_THEME", "dark").lower()
-_theme = _THEMES.get(_theme_name, _THEMES["dark"])
+def _color_from_hex(raw: str) -> QColor:
+    """Convert '#rrggbb' or '#rrggbbaa' to QColor. Caller has already validated."""
+    body = raw.lstrip("#")
+    if len(body) == 6:
+        r, g, b = int(body[0:2], 16), int(body[2:4], 16), int(body[4:6], 16)
+        return QColor(r, g, b, 255)
+    return QColor(int(body[0:2], 16), int(body[2:4], 16), int(body[4:6], 16), int(body[6:8], 16))
+
+
+def apply_theme(name: str = "dark", overrides: dict[str, str] | None = None) -> None:
+    """Replace the active theme palette. Env var LOGITECHMOUSE_THEME, when set,
+    overrides `name` so users can force a preset for testing without editing
+    config. Unknown preset names fall back to dark (validation happens upstream
+    in config.py — this is the safety net)."""
+    env_name = os.environ.get("LOGITECHMOUSE_THEME")
+    chosen = (env_name or name or "dark").lower()
+    base = _THEMES.get(chosen, _THEMES["dark"]).copy()
+    if overrides:
+        for key, hex_value in overrides.items():
+            if key in base:
+                base[key] = _color_from_hex(hex_value)
+    global _theme
+    _theme = base
+
+
+_theme: dict[str, QColor] = {}
+apply_theme()
 
 
 class RingWidget(QWidget):

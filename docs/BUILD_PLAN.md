@@ -42,9 +42,19 @@
 - overlay performance: skip identical repaints, cache font metrics, precompute bubble positions
 - active segment label rendered in dead zone center for immediate selection feedback
 - theme system: `dark` (default) and `brazil` via `LOGITECHMOUSE_THEME` env var
+- app-specific profiles via X11 active-window detection (`xdotool` → WM_CLASS),
+  `[profiles.NAME]` config sections override global bindings per-trigger
 
-## Planned
+## Phase 7
 
-- app-specific profiles via X11 active-window detection (`_NET_ACTIVE_WINDOW`)
-- themes promoted to TOML `[theme]` config section
-- Wayland support (layer-shell or per-compositor; deferred post-v1)
+- themes promoted to first-class TOML `[theme]` section with preset name plus
+  per-key `[theme.overrides]` (hex `#rrggbb` / `#rrggbbaa`); env var stays as
+  testing escape hatch
+- minimalist B&W redesign: radial bubble gradients, hairline strokes, fade-out
+
+## Planned (post-v1)
+
+- interactive ring management: CLI/GUI for adding/removing apps from a ring
+  without hand-editing `config.toml`
+- Wayland support (layer-shell or per-compositor)
+- BTN_EXTRA binding (deferred until use case is clearer)

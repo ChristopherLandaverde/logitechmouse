@@ -137,6 +137,41 @@ class DeviceConfig:
     path: str | None = None
 
 
+# Recognized preset names. Widget owns the actual color tables; this list
+# exists so config validation can reject typos without importing PyQt.
+_VALID_THEME_PRESETS = ("dark", "brazil")
+
+# Keys a user may override in `[theme.overrides]`. Must stay in lock-step with
+# the keys present in every preset of `_THEMES` in overlay/widget.py.
+_VALID_THEME_KEYS = frozenset(
+    {"bubble", "bubble_active", "dead_zone", "label", "label_active", "cancel", "center_label"}
+)
+
+
+def _parse_hex_color(raw: str, where: str) -> str:
+    """Validate a hex color string (`#rrggbb` or `#rrggbbaa`). Returns it
+    normalized to lowercase. Raises ConfigError on bad input."""
+    if not isinstance(raw, str):
+        raise ConfigError(f"{where} must be a string like '#rrggbb', got {type(raw).__name__}")
+    if not raw.startswith("#") or len(raw) not in (7, 9):
+        raise ConfigError(
+            f"{where} must be '#rrggbb' or '#rrggbbaa', got {raw!r}"
+        )
+    body = raw[1:]
+    try:
+        int(body, 16)
+    except ValueError:
+        raise ConfigError(f"{where} contains non-hex digits: {raw!r}") from None
+    return raw.lower()
+
+
+@dataclass
+class Theme:
+    name: str = "dark"
+    # Maps theme key (e.g. "bubble_active") to a hex string. Widget converts.
+    overrides: dict[str, str] = field(default_factory=dict)
+
+
 @dataclass
 class AppConfig:
     actions: dict[str, Action] = field(default_factory=dict)
@@ -144,6 +179,7 @@ class AppConfig:
     rings: dict[str, Ring] = field(default_factory=dict)
     device: DeviceConfig = field(default_factory=DeviceConfig)
     profiles: dict[str, Profile] = field(default_factory=dict)
+    theme: Theme = field(default_factory=Theme)
 
 
 def load_config(path: Path | None = None) -> AppConfig:
@@ -189,7 +225,36 @@ def load_config(path: Path | None = None) -> AppConfig:
             name=pname, match_wm_class=match_wm, bindings=profile_bindings
         )
 
-    return AppConfig(actions=actions, bindings=bindings, rings=rings, device=device, profiles=profiles)
+    raw_theme = raw.get("theme", {}) or {}
+    theme_name = raw_theme.get("name", "dark")
+    if not isinstance(theme_name, str):
+        raise ConfigError(f"theme.name must be a string, got {type(theme_name).__name__}")
+    if theme_name not in _VALID_THEME_PRESETS:
+        raise ConfigError(
+            f"theme.name {theme_name!r} unknown; expected one of "
+            + ", ".join(_VALID_THEME_PRESETS)
+        )
+    raw_overrides = raw_theme.get("overrides", {}) or {}
+    if not isinstance(raw_overrides, dict):
+        raise ConfigError("theme.overrides must be a table of key = '#rrggbb' entries")
+    overrides: dict[str, str] = {}
+    for key, value in raw_overrides.items():
+        if key not in _VALID_THEME_KEYS:
+            raise ConfigError(
+                f"theme.overrides has unknown key {key!r}; expected one of "
+                + ", ".join(sorted(_VALID_THEME_KEYS))
+            )
+        overrides[key] = _parse_hex_color(value, where=f"theme.overrides.{key}")
+    theme = Theme(name=theme_name, overrides=overrides)
+
+    return AppConfig(
+        actions=actions,
+        bindings=bindings,
+        rings=rings,
+        device=device,
+        profiles=profiles,
+        theme=theme,
+    )
 
 
 def validate_config(config: AppConfig) -> None:

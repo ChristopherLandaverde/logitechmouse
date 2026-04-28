@@ -113,14 +113,29 @@ ring bindings will fail validation with a clear message.
 
 ### Themes
 
-The ring ships with a dark default. A second palette is available via env var:
+The ring ships with two presets: `dark` (default) and `brazil` (yellow/blue,
+bandeira do Brasil). Pick one via your `config.toml`:
 
-```bash
-LOGITECHMOUSE_THEME=brazil logitechmouse listen
+```toml
+[theme]
+name = "brazil"
 ```
 
-Themes today: `dark` (default), `brazil` (green/yellow/blue, bandeira do Brasil).
-Full theming via config is a polish phase; the env var is the v1 escape hatch.
+You can also override individual colors on top of a preset. Keys accept
+`#rrggbb` or `#rrggbbaa` (alpha):
+
+```toml
+[theme]
+name = "dark"
+
+[theme.overrides]
+bubble_active = "#ffdf00"   # active bubble fill
+center_label  = "#002776"   # active segment label in dead zone
+# Other keys: bubble, dead_zone, label, label_active, cancel
+```
+
+The `LOGITECHMOUSE_THEME=<preset>` env var still works and overrides the
+TOML preset name — handy for testing without editing config.
 
 ## Troubleshooting
 
