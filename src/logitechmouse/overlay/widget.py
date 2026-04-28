@@ -23,11 +23,11 @@ except ImportError:
 # as an invisible black square. Opaque backdrop with circular mask in v1.
 RING_OUTER_RADIUS = 215
 RING_DEAD_ZONE_RADIUS = 38
-BUBBLE_ORBIT = 110
-BUBBLE_R = 33
-BUBBLE_R_ACTIVE = 40
-_ICON_SIZE = 22
-_ICON_SIZE_ACTIVE = 28
+BUBBLE_ORBIT = 115
+BUBBLE_R = 24
+BUBBLE_R_ACTIVE = 30
+_ICON_SIZE = 15
+_ICON_SIZE_ACTIVE = 19
 
 _THEMES: dict[str, dict[str, QColor]] = {
     "dark": {
@@ -72,10 +72,24 @@ class RingWidget(QWidget):
         self._open_animation: QPropertyAnimation | None = None
         self.is_in_dead_zone = True
         self._icon_cache: dict[tuple, QPixmap | None] = {}
+        self._bubble_offsets: list[tuple[float, float]] = []
+        self._monogram_font = QFont()
+        self._monogram_font.setBold(True)
+        self._monogram_font.setPointSize(10)
+        self._cancel_font = QFont()
+        self._cancel_font.setPointSize(9)
 
     def show_at(self, ring: Ring, cursor_pos: tuple[int, int]) -> None:
         if ring is not self._ring:
             self._icon_cache.clear()
+            n = len(ring.segments)
+            self._bubble_offsets = [
+                (
+                    math.cos(math.radians(i * (360.0 / n) - 90.0)) * BUBBLE_ORBIT,
+                    math.sin(math.radians(i * (360.0 / n) - 90.0)) * BUBBLE_ORBIT,
+                )
+                for i in range(n)
+            ]
         self._ring = ring
         screen = QGuiApplication.screenAt(QPoint(*cursor_pos)) or QGuiApplication.primaryScreen()
         geom = screen.geometry()
@@ -115,9 +129,14 @@ class RingWidget(QWidget):
             return
         dx = cursor_x - self._center_x
         dy = cursor_y - self._center_y
-        self.is_in_dead_zone = is_in_dead_zone(dx, dy, RING_DEAD_ZONE_RADIUS)
-        if not self.is_in_dead_zone:
-            self.active_segment_index = wedge_index(dx, dy, len(self._ring.segments))
+        new_dead = is_in_dead_zone(dx, dy, RING_DEAD_ZONE_RADIUS)
+        new_seg = self.active_segment_index
+        if not new_dead:
+            new_seg = wedge_index(dx, dy, len(self._ring.segments))
+        if new_seg == self.active_segment_index and new_dead == self.is_in_dead_zone:
+            return
+        self.active_segment_index = new_seg
+        self.is_in_dead_zone = new_dead
         self.update()
 
     def _build_mask(self, ring: Ring, size: int) -> QRegion:
@@ -153,20 +172,12 @@ class RingWidget(QWidget):
         p = QPainter(self)
         p.setRenderHint(QPainter.RenderHint.Antialiasing, True)
 
-        w = self.width()
-        h = self.height()
-        ox = w / 2.0
-        oy = h / 2.0
-        n = len(self._ring.segments)
+        ox = self.width() / 2.0
+        oy = self.height() / 2.0
 
-        monogram_font = QFont()
-        monogram_font.setBold(True)
-        monogram_font.setPointSize(10)
-
-        for i in range(n):
-            theta_rad = math.radians(i * (360.0 / n) - 90.0)
-            bx = ox + math.cos(theta_rad) * BUBBLE_ORBIT
-            by = oy + math.sin(theta_rad) * BUBBLE_ORBIT
+        for i, (dx_off, dy_off) in enumerate(self._bubble_offsets):
+            bx = ox + dx_off
+            by = oy + dy_off
             is_active = i == self.active_segment_index and not self.is_in_dead_zone
             r = float(BUBBLE_R_ACTIVE if is_active else BUBBLE_R)
 
@@ -181,7 +192,7 @@ class RingWidget(QWidget):
                 p.drawPixmap(int(bx - icon_size / 2), int(by - icon_size / 2), pixmap)
             else:
                 monogram = segment.label[0].upper() if segment.label else "?"
-                p.setFont(monogram_font)
+                p.setFont(self._monogram_font)
                 p.setPen(_theme["label_active"] if is_active else _theme["label"])
                 fm = p.fontMetrics()
                 p.drawText(int(bx - fm.horizontalAdvance(monogram) / 2), int(by + fm.height() / 4), monogram)
@@ -191,9 +202,7 @@ class RingWidget(QWidget):
         p.drawEllipse(QRectF(ox - RING_DEAD_ZONE_RADIUS, oy - RING_DEAD_ZONE_RADIUS, RING_DEAD_ZONE_RADIUS * 2.0, RING_DEAD_ZONE_RADIUS * 2.0))
 
         if self.is_in_dead_zone:
-            cancel_font = QFont()
-            cancel_font.setPointSize(9)
-            p.setFont(cancel_font)
+            p.setFont(self._cancel_font)
             p.setPen(_theme["cancel"])
             fm = p.fontMetrics()
             p.drawText(int(ox - fm.horizontalAdvance("X") / 2), int(oy + fm.height() / 4), "X")
