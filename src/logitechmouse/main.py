@@ -44,6 +44,22 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("name", help="Action name as defined in config")
     p_run.add_argument("--dry-run", action="store_true", help="Do not spawn the command")
 
+    p_install = sub.add_parser(
+        "install-service",
+        help="Write a systemd user unit file for logitechmouse",
+    )
+    p_install.add_argument(
+        "--config",
+        type=Path,
+        required=True,
+        help="Path to config TOML (baked into ExecStart)",
+    )
+    p_install.add_argument(
+        "--force",
+        action="store_true",
+        help="Overwrite an existing unit file",
+    )
+
     return parser
 
 
@@ -62,6 +78,8 @@ def main() -> int:
         from .cli.check_config import run as run_cmd
     elif args.command == "run":
         from .cli.run import run as run_cmd
+    elif args.command == "install-service":
+        from .cli.install_service import run as run_cmd
     else:
         parser.error(f"unknown command: {args.command}")
 
