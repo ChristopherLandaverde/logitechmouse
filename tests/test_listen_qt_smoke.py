@@ -32,7 +32,7 @@ def test_qt_listener_dispatches_one_keydown_then_exits(tmp_path):
 
     fake_device = type("FakeDev", (), {"path": "/fake", "name": "Fake"})()
 
-    def fake_read_loop(_dev):
+    def fake_read_loop(_dev, swallow_codes=None, virt=None):
         yield InputEvent(trigger="BTN_TASK", pressed=True)
         yield InputEvent(trigger="BTN_TASK", pressed=False)
 
@@ -40,7 +40,7 @@ def test_qt_listener_dispatches_one_keydown_then_exits(tmp_path):
         listen_mod.EvdevBackend, "resolve", return_value=fake_device,
     ), patch.object(
         listen_mod.EvdevBackend, "read_loop", side_effect=fake_read_loop,
-    ):
+    ), patch("logitechmouse.cli.listen.try_grab", return_value=None):
         rc = listen_mod.run(args)
 
     assert rc == 0

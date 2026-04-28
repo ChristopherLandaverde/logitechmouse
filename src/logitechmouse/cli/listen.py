@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import signal
 import sys
+from contextlib import contextmanager
 from typing import Callable
 
 from ..actions import run_action as _default_run_action
@@ -12,6 +14,32 @@ from ..device import (
     DeviceUnreadableError,
     EvdevBackend,
 )
+from ..device_grab import try_grab
+
+
+@contextmanager
+def _sigterm_raises_keyboard_interrupt():
+    """Map SIGTERM to KeyboardInterrupt for the duration of the block.
+
+    The command-only path already exits cleanly on KeyboardInterrupt (the
+    `finally` runs and the read loop ends), so re-using the same path
+    keeps the teardown in one place. SIGINT (Ctrl-C) is unaffected and
+    continues to use Python's default mapping, which lands in the same
+    `except KeyboardInterrupt`. Conflating user-cancel and service-stop
+    under one log line is intentional — both want identical teardown.
+
+    Not re-entrant; intended for a single call site.
+    """
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def _raise(signum, frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _raise)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 REMEDIATION = (
@@ -58,6 +86,15 @@ def _has_ring_bindings(cfg: AppConfig) -> bool:
     return any(b.target.kind == "ring" for b in cfg.bindings.values())
 
 
+def _build_swallow_codes(cfg: AppConfig) -> set[int]:
+    from evdev import ecodes
+    return {
+        ecodes.ecodes[b.trigger]
+        for b in cfg.bindings.values()
+        if b.trigger in ecodes.ecodes
+    }
+
+
 def run(args: argparse.Namespace) -> int:
     try:
         cfg = load_config(args.config)
@@ -102,25 +139,50 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
-    """Phase 2 path: no Qt, blocking read loop on the main thread."""
+    """Phase 2 path: no Qt, blocking read loop on the main thread.
+
+    Auto-grabs the device via uinput so bound triggers do not reach
+    focused applications. Falls back to no-grab if try_grab returns None.
+    """
+    swallow_codes = _build_swallow_codes(cfg)
+    virt = try_grab(device)
     try:
-        for event in backend.read_loop(device):
-            dispatch_event(
-                cfg,
-                ring_controller=_NoOpRingController(),
-                run_action=_default_run_action,
-                trigger=event.trigger,
-                pressed=event.pressed,
-                cursor_pos=(0, 0),
-            )
+        with _sigterm_raises_keyboard_interrupt():
+            for event in backend.read_loop(
+                device, swallow_codes=swallow_codes, virt=virt
+            ):
+                dispatch_event(
+                    cfg,
+                    ring_controller=_NoOpRingController(),
+                    run_action=_default_run_action,
+                    trigger=event.trigger,
+                    pressed=event.pressed,
+                    cursor_pos=(0, 0),
+                )
+    except KeyboardInterrupt:
+        logging.info("listener stopped")
     except OSError as exc:
         logging.warning("device read failed: %s", exc)
         return 1
+    finally:
+        if virt is not None:
+            try:
+                virt.close()
+            except Exception:
+                logging.exception("virt.close() failed")
+            try:
+                device.ungrab()
+            except OSError:
+                pass
     return 0
 
 
 def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
-    """Ring-enabled path: QApplication on main thread, listener on worker thread."""
+    """Ring-enabled path: QApplication on main thread, listener on worker thread.
+
+    Auto-grabs the device the same way the command-only path does. Teardown
+    runs after app.exec() returns.
+    """
     try:
         from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal, pyqtSlot
         from PyQt6.QtGui import QCursor
@@ -135,6 +197,9 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     from ..overlay.ring import RingController
     from ..overlay.widget import RingWidget
     from ..overlay.cursor import CursorPoller
+
+    swallow_codes = _build_swallow_codes(cfg)
+    virt = try_grab(device)
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -151,10 +216,17 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
 
         def run(self) -> None:
             try:
-                for ev in backend.read_loop(device):
+                for ev in backend.read_loop(
+                    device, swallow_codes=swallow_codes, virt=virt
+                ):
                     self.event_received.emit(ev.trigger, ev.pressed)
             except OSError as exc:
                 logging.warning("device read failed: %s", exc)
+                self.finished.emit(1)
+                return
+            except Exception:
+                # Anything else escaping here would deadlock app.exec().
+                logging.exception("unexpected error in listener worker")
                 self.finished.emit(1)
                 return
             self.finished.emit(0)
@@ -198,8 +270,20 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
 
-    app.exec()
-    thread.wait(2000)
+    try:
+        app.exec()
+        thread.wait(2000)
+    finally:
+        if virt is not None:
+            try:
+                virt.close()
+            except Exception:
+                logging.exception("virt.close() failed")
+            try:
+                device.ungrab()
+            except OSError:
+                pass
+
     return return_code["value"]
 
 
