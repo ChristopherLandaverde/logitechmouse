@@ -12,7 +12,7 @@ Description=Logitech Mouse button remapper
 After=graphical-session.target
 
 [Service]
-ExecStart={exec_start} listen --config {config_path}
+ExecStart={exec_start} --config {config_path} listen
 Restart=on-failure
 RestartSec=3
 

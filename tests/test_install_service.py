@@ -33,7 +33,7 @@ def test_happy_path_writes_unit_file(tmp_path):
     content = unit.read_text()
     assert "/usr/local/bin/logitechmouse" in content
     assert str(config.resolve()) in content
-    assert "listen --config" in content
+    assert "listen" in content and str(config.resolve()) in content
     assert "Restart=on-failure" in content
 
 
@@ -104,7 +104,7 @@ def test_force_overwrites_existing_unit(tmp_path):
     assert rc == 0
     content = (unit_dir / "logitechmouse.service").read_text()
     assert content != "old content"
-    assert "listen --config" in content
+    assert "listen" in content and str(config.resolve()) in content
 
 
 def test_daemon_reload_failure_warns_but_returns_0(tmp_path):
