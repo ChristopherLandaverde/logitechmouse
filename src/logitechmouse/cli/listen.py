@@ -21,9 +21,14 @@ from ..device_grab import try_grab
 def _sigterm_raises_keyboard_interrupt():
     """Map SIGTERM to KeyboardInterrupt for the duration of the block.
 
-    Both listener paths already exit cleanly on KeyboardInterrupt (the
+    The command-only path already exits cleanly on KeyboardInterrupt (the
     `finally` runs and the read loop ends), so re-using the same path
-    keeps the teardown in one place.
+    keeps the teardown in one place. SIGINT (Ctrl-C) is unaffected and
+    continues to use Python's default mapping, which lands in the same
+    `except KeyboardInterrupt`. Conflating user-cancel and service-stop
+    under one log line is intentional — both want identical teardown.
+
+    Not re-entrant; intended for a single call site.
     """
     previous = signal.getsignal(signal.SIGTERM)
 
