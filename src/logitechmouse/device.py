@@ -3,11 +3,14 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass
-from typing import Iterator
+from typing import TYPE_CHECKING, Iterator
 
 from evdev import InputDevice, categorize, ecodes, list_devices
 
 from .config import DeviceConfig
+
+if TYPE_CHECKING:
+    from .device_grab import VirtualDevice
 
 logger = logging.getLogger(__name__)
 
@@ -185,10 +188,29 @@ class EvdevBackend:
                 _close_quietly(dev)
         return best_dev
 
-    def read_loop(self, device: InputDevice) -> Iterator[InputEvent]:
-        """Yield InputEvent for every key-down (pressed=True) and key-up
-        (pressed=False) on `device`. Ignores key-repeat (value=2). Blocking."""
+    def read_loop(
+        self,
+        device: InputDevice,
+        swallow_codes: set[int] | None = None,
+        virt: "VirtualDevice | None" = None,
+    ) -> Iterator[InputEvent]:
+        """Yield InputEvent for every key-down and key-up on `device`,
+        ignoring key-repeat (value=2).
+
+        When `virt` is provided, every event is forwarded to it *except*
+        EV_KEY events whose code is in `swallow_codes`. This is how
+        bound triggers are kept from reaching focused applications while
+        cursor motion, scroll, and unbound buttons pass through.
+        """
+        swallow = swallow_codes or set()
         for event in device.read_loop():
+            if virt is not None:
+                is_bound_key = (
+                    event.type == ecodes.EV_KEY and event.code in swallow
+                )
+                if not is_bound_key:
+                    virt.write_event(event)
+
             if event.type != ecodes.EV_KEY:
                 continue
             if event.value not in (0, 1):
