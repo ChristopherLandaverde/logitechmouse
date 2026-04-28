@@ -59,6 +59,15 @@ def _has_ring_bindings(cfg: AppConfig) -> bool:
     return any(b.target.kind == "ring" for b in cfg.bindings.values())
 
 
+def _build_swallow_codes(cfg: AppConfig) -> set[int]:
+    from evdev import ecodes
+    return {
+        ecodes.ecodes[b.trigger]
+        for b in cfg.bindings.values()
+        if b.trigger in ecodes.ecodes
+    }
+
+
 def run(args: argparse.Namespace) -> int:
     try:
         cfg = load_config(args.config)
@@ -108,12 +117,7 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     Auto-grabs the device via uinput so bound triggers do not reach
     focused applications. Falls back to no-grab if try_grab returns None.
     """
-    from evdev import ecodes
-    swallow_codes = {
-        ecodes.ecodes[b.trigger]
-        for b in cfg.bindings.values()
-        if b.trigger in ecodes.ecodes
-    }
+    swallow_codes = _build_swallow_codes(cfg)
     virt = try_grab(device)
     try:
         for event in backend.read_loop(
@@ -160,16 +164,11 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         )
         return 1
 
-    from evdev import ecodes
     from ..overlay.ring import RingController
     from ..overlay.widget import RingWidget
     from ..overlay.cursor import CursorPoller
 
-    swallow_codes = {
-        ecodes.ecodes[b.trigger]
-        for b in cfg.bindings.values()
-        if b.trigger in ecodes.ecodes
-    }
+    swallow_codes = _build_swallow_codes(cfg)
     virt = try_grab(device)
 
     app = QApplication.instance() or QApplication(sys.argv)
@@ -193,6 +192,11 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
                     self.event_received.emit(ev.trigger, ev.pressed)
             except OSError as exc:
                 logging.warning("device read failed: %s", exc)
+                self.finished.emit(1)
+                return
+            except Exception:
+                # Anything else escaping here would deadlock app.exec().
+                logging.exception("unexpected error in listener worker")
                 self.finished.emit(1)
                 return
             self.finished.emit(0)
