@@ -23,6 +23,8 @@ WantedBy=default.target
 
 def run(args: argparse.Namespace) -> int:
     exec_start = shutil.which("logitechmouse") or (sys.argv[0] if sys.argv else None)
+    if exec_start:
+        exec_start = str(__import__("pathlib").Path(exec_start).resolve())
     if not exec_start:
         logging.error("cannot resolve logitechmouse binary; check your PATH")
         return 1
