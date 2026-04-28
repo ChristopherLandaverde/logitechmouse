@@ -7,14 +7,18 @@ import subprocess
 import sys
 from pathlib import Path
 
-_UNIT_TEMPLATE = """\n[Unit]
+_UNIT_TEMPLATE = """\
+[Unit]
 Description=Logitech Mouse button remapper
 After=graphical-session.target
+StartLimitIntervalSec=60
+StartLimitBurst=5
 
 [Service]
 ExecStart={exec_start} --config {config_path} listen
+PassEnvironment=DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XAUTHORITY
 Restart=on-failure
-RestartSec=3
+RestartSec=5
 
 [Install]
 WantedBy=default.target

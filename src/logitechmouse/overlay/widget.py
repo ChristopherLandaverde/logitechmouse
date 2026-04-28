@@ -6,56 +6,55 @@ import math
 import os
 
 from PyQt6.QtCore import Qt, QPoint, QRect, QRectF, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QColor, QGuiApplication, QPainter, QPen, QRegion
+from PyQt6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPixmap, QRegion
 from PyQt6.QtWidgets import QWidget
 
 from ..config import Ring
 from .geometry import is_in_dead_zone, shifted_center_for_screen, wedge_index
 
+try:
+    import qtawesome as qta
+    _QTA_AVAILABLE = True
+except ImportError:
+    _QTA_AVAILABLE = False
 
-# Visual constants — tunable later.
-# Spec §3.3 originally called for rgba(24, 24, 24, 0.85) translucent dark
-# with WA_TranslucentBackground. On the Mutter compositor (Pop!_OS / GNOME)
-# we tested on, that combination rendered as an invisible black square. We
-# ship opaque colors with WA_TranslucentBackground disabled in v1; theming
-# is a polish item (spec §2, §10).
-RING_OUTER_RADIUS = 180
-RING_DEAD_ZONE_RADIUS = 45
-SEPARATOR_COLOR = QColor(0, 0, 0, 200)
 
-# Themes. Keep these tiny — theming is a polish phase. Pick via
-# LOGITECHMOUSE_THEME=<name>; default is "dark".
-_THEMES = {
+# WA_TranslucentBackground intentionally disabled: on Mutter/GNOME it renders
+# as an invisible black square. Opaque backdrop with circular mask in v1.
+RING_OUTER_RADIUS = 215
+RING_DEAD_ZONE_RADIUS = 38
+BUBBLE_ORBIT = 110
+BUBBLE_R = 33
+BUBBLE_R_ACTIVE = 40
+_ICON_SIZE = 22
+_ICON_SIZE_ACTIVE = 28
+
+_THEMES: dict[str, dict[str, QColor]] = {
     "dark": {
-        "bg": QColor(40, 40, 40, 255),
-        "active": QColor(80, 80, 80, 255),
-        "dead_zone": QColor(20, 20, 20, 255),
-        "label": QColor(230, 230, 230),
-        "cancel": QColor(160, 160, 160),
+        "bubble":        QColor(160, 160, 160, 255),
+        "bubble_active": QColor(235, 235, 235, 255),
+        "dead_zone":     QColor(18, 18, 18, 255),
+        "label":         QColor(30, 30, 30, 255),
+        "label_active":  QColor(10, 10, 10, 255),
+        "cancel":        QColor(130, 130, 130, 255),
     },
     "brazil": {
-        # Bandeira do Brasil. Earned during the Phase 4 hardware test.
-        "bg": QColor(0, 156, 59, 255),       # green
-        "active": QColor(0, 39, 118, 255),    # blue
-        "dead_zone": QColor(255, 223, 0, 255), # yellow
-        "label": QColor(255, 255, 255),
-        "cancel": QColor(40, 40, 40),
+        "bubble":        QColor(160, 160, 160, 255),
+        "bubble_active": QColor(255, 223, 0, 255),
+        "dead_zone":     QColor(255, 223, 0, 255),
+        "label":         QColor(30, 30, 30, 255),
+        "label_active":  QColor(0, 39, 118, 255),
+        "cancel":        QColor(255, 255, 255, 255),
     },
 }
 
 _theme_name = os.environ.get("LOGITECHMOUSE_THEME", "dark").lower()
 _theme = _THEMES.get(_theme_name, _THEMES["dark"])
 
-BG_COLOR = _theme["bg"]
-ACTIVE_BG_COLOR = _theme["active"]
-DEAD_ZONE_COLOR = _theme["dead_zone"]
-LABEL_COLOR = _theme["label"]
-CANCEL_COLOR = _theme["cancel"]
-
 
 class RingWidget(QWidget):
-    """Renders the ring. Polled cursor position drives `active_segment_index`
-    and `is_in_dead_zone`. The widget itself does not capture input.
+    """Renders the ring. Polled cursor position drives active_segment_index
+    and is_in_dead_zone. The widget itself does not capture input.
     """
 
     def __init__(self) -> None:
@@ -65,20 +64,18 @@ class RingWidget(QWidget):
             | Qt.WindowType.WindowStaysOnTopHint
             | Qt.WindowType.Tool,
         )
-        # WA_TranslucentBackground intentionally disabled — see BG_COLOR comment.
-        # When theming lands, gating this on a config flag is the next step.
         self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
-
         self._ring: Ring | None = None
         self._center_x = 0
         self._center_y = 0
         self.active_segment_index = 0
         self._open_animation: QPropertyAnimation | None = None
         self.is_in_dead_zone = True
-
-    # --- public API consumed by RingController ---
+        self._icon_cache: dict[tuple, QPixmap | None] = {}
 
     def show_at(self, ring: Ring, cursor_pos: tuple[int, int]) -> None:
+        if ring is not self._ring:
+            self._icon_cache.clear()
         self._ring = ring
         screen = QGuiApplication.screenAt(QPoint(*cursor_pos)) or QGuiApplication.primaryScreen()
         geom = screen.geometry()
@@ -99,17 +96,11 @@ class RingWidget(QWidget):
             size,
             size,
         )
-        # Mask the widget to a circle so the four square corners don't
-        # render against the desktop. WA_TranslucentBackground is off
-        # in v1 (compositor compatibility), so without this mask the
-        # widget would show as an opaque square.
-        self.setMask(QRegion(QRect(0, 0, size, size), QRegion.RegionType.Ellipse))
+        self.setMask(self._build_mask(ring, size))
         self.update_cursor_position(*cursor_pos)
         self.show()
         self.raise_()
 
-        # 75 ms fade-in via window opacity (works on X11 even with
-        # WA_TranslucentBackground disabled — uses the WM composite path).
         self.setWindowOpacity(0.0)
         anim = QPropertyAnimation(self, b"windowOpacity", self)
         anim.setDuration(75)
@@ -129,9 +120,34 @@ class RingWidget(QWidget):
             self.active_segment_index = wedge_index(dx, dy, len(self._ring.segments))
         self.update()
 
-    # --- painting ---
+    def _build_mask(self, ring: Ring, size: int) -> QRegion:
+        ox = size / 2.0
+        oy = size / 2.0
+        n = len(ring.segments)
+        region = QRegion()
+        dz = RING_DEAD_ZONE_RADIUS + 4
+        region |= QRegion(QRect(int(ox - dz), int(oy - dz), dz * 2, dz * 2), QRegion.RegionType.Ellipse)
+        for i in range(n):
+            theta_rad = math.radians(i * (360.0 / n) - 90.0)
+            bx = ox + math.cos(theta_rad) * BUBBLE_ORBIT
+            by = oy + math.sin(theta_rad) * BUBBLE_ORBIT
+            r = BUBBLE_R_ACTIVE + 4
+            region |= QRegion(QRect(int(bx - r), int(by - r), r * 2, r * 2), QRegion.RegionType.Ellipse)
+        return region
 
-    def paintEvent(self, event) -> None:  # noqa: N802 (Qt naming)
+    def _icon_pixmap(self, icon_name: str, size: int, is_active: bool) -> QPixmap | None:
+        if not _QTA_AVAILABLE or not icon_name:
+            return None
+        key = (icon_name, size, is_active)
+        if key not in self._icon_cache:
+            color = _theme["label_active"] if is_active else _theme["label"]
+            try:
+                self._icon_cache[key] = qta.icon(icon_name, color=color).pixmap(size, size)
+            except Exception:
+                self._icon_cache[key] = None
+        return self._icon_cache[key]
+
+    def paintEvent(self, event) -> None:  # noqa: N802
         if self._ring is None:
             return
         p = QPainter(self)
@@ -141,42 +157,43 @@ class RingWidget(QWidget):
         h = self.height()
         ox = w / 2.0
         oy = h / 2.0
-
         n = len(self._ring.segments)
-        wedge_deg = 360.0 / n
-        outer = RING_OUTER_RADIUS
-        inner = RING_DEAD_ZONE_RADIUS
+
+        monogram_font = QFont()
+        monogram_font.setBold(True)
+        monogram_font.setPointSize(10)
 
         for i in range(n):
-            theta_center = i * wedge_deg
-            qt_start_angle = (90.0 - (theta_center + wedge_deg / 2.0))
-            color = ACTIVE_BG_COLOR if (
-                i == self.active_segment_index and not self.is_in_dead_zone
-            ) else BG_COLOR
-            p.setPen(QPen(SEPARATOR_COLOR, 1))
-            p.setBrush(color)
-            rect = QRectF(ox - outer, oy - outer, outer * 2, outer * 2)
-            p.drawPie(rect, int(qt_start_angle * 16), int(wedge_deg * 16))
+            theta_rad = math.radians(i * (360.0 / n) - 90.0)
+            bx = ox + math.cos(theta_rad) * BUBBLE_ORBIT
+            by = oy + math.sin(theta_rad) * BUBBLE_ORBIT
+            is_active = i == self.active_segment_index and not self.is_in_dead_zone
+            r = float(BUBBLE_R_ACTIVE if is_active else BUBBLE_R)
 
-            label_radius = outer * 0.70
-            theta_rad = math.radians(theta_center - 90.0)
-            lx = ox + math.cos(theta_rad) * label_radius
-            ly = oy + math.sin(theta_rad) * label_radius
-            p.setPen(LABEL_COLOR)
-            text = self._ring.segments[i].label
-            metrics = p.fontMetrics()
-            tw = metrics.horizontalAdvance(text)
-            th = metrics.height()
-            p.drawText(int(lx - tw / 2), int(ly + th / 4), text)
+            p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(_theme["bubble_active"] if is_active else _theme["bubble"])
+            p.drawEllipse(QRectF(bx - r, by - r, r * 2.0, r * 2.0))
 
-        p.setPen(QPen(SEPARATOR_COLOR, 1))
-        p.setBrush(DEAD_ZONE_COLOR)
-        p.drawEllipse(QRectF(ox - inner, oy - inner, inner * 2, inner * 2))
+            segment = self._ring.segments[i]
+            icon_size = _ICON_SIZE_ACTIVE if is_active else _ICON_SIZE
+            pixmap = self._icon_pixmap(segment.icon or "", icon_size, is_active)
+            if pixmap is not None:
+                p.drawPixmap(int(bx - icon_size / 2), int(by - icon_size / 2), pixmap)
+            else:
+                monogram = segment.label[0].upper() if segment.label else "?"
+                p.setFont(monogram_font)
+                p.setPen(_theme["label_active"] if is_active else _theme["label"])
+                fm = p.fontMetrics()
+                p.drawText(int(bx - fm.horizontalAdvance(monogram) / 2), int(by + fm.height() / 4), monogram)
+
+        p.setPen(Qt.PenStyle.NoPen)
+        p.setBrush(_theme["dead_zone"])
+        p.drawEllipse(QRectF(ox - RING_DEAD_ZONE_RADIUS, oy - RING_DEAD_ZONE_RADIUS, RING_DEAD_ZONE_RADIUS * 2.0, RING_DEAD_ZONE_RADIUS * 2.0))
 
         if self.is_in_dead_zone:
-            p.setPen(CANCEL_COLOR)
-            text = "Cancel"
-            metrics = p.fontMetrics()
-            tw = metrics.horizontalAdvance(text)
-            th = metrics.height()
-            p.drawText(int(ox - tw / 2), int(oy + th / 4), text)
+            cancel_font = QFont()
+            cancel_font.setPointSize(9)
+            p.setFont(cancel_font)
+            p.setPen(_theme["cancel"])
+            fm = p.fontMetrics()
+            p.drawText(int(ox - fm.horizontalAdvance("X") / 2), int(oy + fm.height() / 4), "X")
