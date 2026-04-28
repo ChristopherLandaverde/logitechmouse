@@ -132,7 +132,10 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         return 1
     finally:
         if virt is not None:
-            virt.close()
+            try:
+                virt.close()
+            except Exception:
+                logging.exception("virt.close() failed")
             try:
                 device.ungrab()
             except OSError:

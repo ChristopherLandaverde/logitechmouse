@@ -77,3 +77,36 @@ def test_command_only_path_no_virt_does_not_call_ungrab(cmd_only_config):
 
     assert rc == 0
     fake_dev.ungrab.assert_not_called()
+
+
+def test_command_only_path_oserror_during_read_still_tears_down(cmd_only_config):
+    """A device disconnect mid-read must still close virt and ungrab."""
+    args = argparse.Namespace(config=cmd_only_config, device=None)
+    fake_dev = MagicMock(path="/dev/input/event99", name="fake")
+    fake_virt = MagicMock()
+
+    with patch.object(listen_mod.EvdevBackend, "resolve", return_value=fake_dev), \
+         patch.object(listen_mod.EvdevBackend, "read_loop", side_effect=OSError("disconnect")), \
+         patch("logitechmouse.cli.listen.try_grab", return_value=fake_virt):
+        rc = listen_mod.run(args)
+
+    assert rc == 1
+    fake_virt.close.assert_called_once_with()
+    fake_dev.ungrab.assert_called_once_with()
+
+
+def test_command_only_path_virt_close_failure_still_ungrabs(cmd_only_config):
+    """A raise from virt.close() must NOT prevent device.ungrab()."""
+    args = argparse.Namespace(config=cmd_only_config, device=None)
+    fake_dev = MagicMock(path="/dev/input/event99", name="fake")
+    fake_virt = MagicMock()
+    fake_virt.close.side_effect = RuntimeError("evdev hiccup")
+
+    with patch.object(listen_mod.EvdevBackend, "resolve", return_value=fake_dev), \
+         patch.object(listen_mod.EvdevBackend, "read_loop", return_value=iter([])), \
+         patch("logitechmouse.cli.listen.try_grab", return_value=fake_virt):
+        rc = listen_mod.run(args)
+
+    assert rc == 0
+    fake_virt.close.assert_called_once_with()
+    fake_dev.ungrab.assert_called_once_with()
