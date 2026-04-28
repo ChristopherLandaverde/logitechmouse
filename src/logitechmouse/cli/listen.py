@@ -144,7 +144,11 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
 
 
 def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
-    """Ring-enabled path: QApplication on main thread, listener on worker thread."""
+    """Ring-enabled path: QApplication on main thread, listener on worker thread.
+
+    Auto-grabs the device the same way the command-only path does. Teardown
+    runs after app.exec() returns.
+    """
     try:
         from PyQt6.QtCore import Qt, QObject, QThread, pyqtSignal, pyqtSlot
         from PyQt6.QtGui import QCursor
@@ -156,9 +160,17 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         )
         return 1
 
+    from evdev import ecodes
     from ..overlay.ring import RingController
     from ..overlay.widget import RingWidget
     from ..overlay.cursor import CursorPoller
+
+    swallow_codes = {
+        ecodes.ecodes[b.trigger]
+        for b in cfg.bindings.values()
+        if b.trigger in ecodes.ecodes
+    }
+    virt = try_grab(device)
 
     app = QApplication.instance() or QApplication(sys.argv)
 
@@ -175,7 +187,9 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
 
         def run(self) -> None:
             try:
-                for ev in backend.read_loop(device):
+                for ev in backend.read_loop(
+                    device, swallow_codes=swallow_codes, virt=virt
+                ):
                     self.event_received.emit(ev.trigger, ev.pressed)
             except OSError as exc:
                 logging.warning("device read failed: %s", exc)
@@ -222,8 +236,20 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
     thread.start()
 
-    app.exec()
-    thread.wait(2000)
+    try:
+        app.exec()
+        thread.wait(2000)
+    finally:
+        if virt is not None:
+            try:
+                virt.close()
+            except Exception:
+                logging.exception("virt.close() failed")
+            try:
+                device.ungrab()
+            except OSError:
+                pass
+
     return return_code["value"]
 
 

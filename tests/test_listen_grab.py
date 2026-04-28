@@ -110,3 +110,58 @@ def test_command_only_path_virt_close_failure_still_ungrabs(cmd_only_config):
     assert rc == 0
     fake_virt.close.assert_called_once_with()
     fake_dev.ungrab.assert_called_once_with()
+
+
+@pytest.fixture
+def ring_config(tmp_path):
+    cfg = tmp_path / "config.toml"
+    cfg.write_text(
+        """
+[device]
+path = "/dev/input/event99"
+
+[actions.beep]
+kind = "command"
+command = "true"
+
+[rings.r1]
+segments = [
+  { label = "a", action = "beep" },
+  { label = "b", action = "beep" },
+  { label = "c", action = "beep" },
+  { label = "d", action = "beep" },
+]
+
+[bindings.b1]
+trigger = "BTN_BACK"
+target = "ring:r1"
+"""
+    )
+    return cfg
+
+
+@pytest.mark.requires_display
+def test_qt_path_calls_try_grab_and_tears_down(ring_config):
+    """In the Qt path, try_grab runs after resolve and teardown runs after app.exec()."""
+    args = argparse.Namespace(config=ring_config, device=None)
+    fake_dev = MagicMock(path="/dev/input/event99", name="fake")
+    fake_virt = MagicMock()
+    captured = {}
+
+    # Stub the worker's read loop to immediately emit `finished` so app.exec returns.
+    def stub_read_loop(device, swallow_codes=None, virt=None):
+        captured["swallow_codes"] = swallow_codes
+        captured["virt"] = virt
+        return iter([])
+
+    with patch.object(listen_mod.EvdevBackend, "resolve", return_value=fake_dev), \
+         patch.object(listen_mod.EvdevBackend, "read_loop", side_effect=stub_read_loop), \
+         patch("logitechmouse.cli.listen.try_grab", return_value=fake_virt) as tg:
+        rc = listen_mod.run(args)
+
+    assert rc == 0
+    tg.assert_called_once_with(fake_dev)
+    assert captured["virt"] is fake_virt
+    assert ecodes.BTN_BACK in captured["swallow_codes"]
+    fake_virt.close.assert_called_once_with()
+    fake_dev.ungrab.assert_called_once_with()
