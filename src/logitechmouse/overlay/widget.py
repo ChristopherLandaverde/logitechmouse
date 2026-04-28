@@ -37,6 +37,7 @@ _THEMES: dict[str, dict[str, QColor]] = {
         "label":         QColor(30, 30, 30, 255),
         "label_active":  QColor(10, 10, 10, 255),
         "cancel":        QColor(130, 130, 130, 255),
+        "center_label":  QColor(230, 230, 230, 255),
     },
     "brazil": {
         "bubble":        QColor(160, 160, 160, 255),
@@ -45,6 +46,7 @@ _THEMES: dict[str, dict[str, QColor]] = {
         "label":         QColor(30, 30, 30, 255),
         "label_active":  QColor(0, 39, 118, 255),
         "cancel":        QColor(255, 255, 255, 255),
+        "center_label":  QColor(0, 39, 118, 255),
     },
 }
 
@@ -78,6 +80,8 @@ class RingWidget(QWidget):
         self._monogram_font.setPointSize(10)
         self._cancel_font = QFont()
         self._cancel_font.setPointSize(9)
+        self._label_font = QFont()
+        self._label_font.setPointSize(8)
 
     def show_at(self, ring: Ring, cursor_pos: tuple[int, int]) -> None:
         if ring is not self._ring:
@@ -206,3 +210,9 @@ class RingWidget(QWidget):
             p.setPen(_theme["cancel"])
             fm = p.fontMetrics()
             p.drawText(int(ox - fm.horizontalAdvance("X") / 2), int(oy + fm.height() / 4), "X")
+        elif self._ring is not None:
+            label = self._ring.segments[self.active_segment_index].label or ""
+            p.setFont(self._label_font)
+            p.setPen(_theme["center_label"])
+            fm = p.fontMetrics()
+            p.drawText(int(ox - fm.horizontalAdvance(label) / 2), int(oy + fm.height() / 4), label)

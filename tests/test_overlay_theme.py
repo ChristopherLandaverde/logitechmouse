@@ -28,31 +28,34 @@ def _reload_widget(theme_value: str | None):
 @pytest.mark.requires_display
 def test_default_theme_is_dark():
     widget = _reload_widget(None)
-    # rgb(40,40,40) is the dark theme background.
-    assert widget.BG_COLOR.red() == 40
-    assert widget.BG_COLOR.green() == 40
-    assert widget.BG_COLOR.blue() == 40
+    # Dark theme dead zone is near-black.
+    assert widget._theme["dead_zone"].red() == 18
+    assert widget._theme["dead_zone"].green() == 18
+    assert widget._theme["dead_zone"].blue() == 18
+    # center_label is light for legibility on dark background.
+    assert widget._theme["center_label"].red() >= 200
 
 
 @pytest.mark.requires_display
 def test_brazil_theme_swaps_palette():
     widget = _reload_widget("brazil")
-    # Bandeira do Brasil green: rgb(0, 156, 59).
-    assert widget.BG_COLOR.red() == 0
-    assert widget.BG_COLOR.green() == 156
-    assert widget.BG_COLOR.blue() == 59
     # Yellow dead zone.
-    assert widget.DEAD_ZONE_COLOR.red() == 255
-    assert widget.DEAD_ZONE_COLOR.green() == 223
-    # Blue active wedge.
-    assert widget.ACTIVE_BG_COLOR.blue() == 118
+    assert widget._theme["dead_zone"].red() == 255
+    assert widget._theme["dead_zone"].green() == 223
+    # Blue label_active.
+    assert widget._theme["label_active"].blue() == 118
+    # center_label is dark blue for legibility on yellow dead zone.
+    assert widget._theme["center_label"].blue() == 118
+    # Both themes define the center_label key.
+    assert "center_label" in widget._THEMES["dark"]
+    assert "center_label" in widget._THEMES["brazil"]
 
 
 @pytest.mark.requires_display
 def test_unknown_theme_falls_back_to_dark():
     widget = _reload_widget("nonsense")
-    # Falls back to dark.
-    assert widget.BG_COLOR.red() == 40
+    # Falls back to dark theme colors.
+    assert widget._theme["dead_zone"].red() == 18
 
 
 @pytest.fixture(autouse=True)
