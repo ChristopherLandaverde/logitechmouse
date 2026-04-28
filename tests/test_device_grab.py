@@ -1,6 +1,8 @@
-from evdev import ecodes
+from unittest.mock import MagicMock, patch
 
-from logitechmouse.device_grab import _filter_capabilities
+from evdev import InputDevice, ecodes
+
+from logitechmouse.device_grab import VirtualDevice, _filter_capabilities, try_grab
 
 
 def test_filter_capabilities_drops_reserved_and_irrelevant_types():
@@ -27,11 +29,6 @@ def test_filter_capabilities_drops_empty_lists():
     out = _filter_capabilities(raw)
     assert ecodes.EV_KEY not in out
     assert out[ecodes.EV_REL] == [ecodes.REL_X]
-
-
-from unittest.mock import MagicMock, patch
-
-from logitechmouse.device_grab import VirtualDevice
 
 
 def _fake_caps():
@@ -106,11 +103,6 @@ def test_virtual_device_write_event_after_close_is_silent():
     v.write_event(raw)  # must not raise
     fake_ui.write.assert_not_called()
     fake_ui.syn.assert_not_called()
-
-
-from evdev import InputDevice
-
-from logitechmouse.device_grab import try_grab
 
 
 def _fake_real_dev():
