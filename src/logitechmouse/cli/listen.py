@@ -12,6 +12,7 @@ from ..device import (
     DeviceUnreadableError,
     EvdevBackend,
 )
+from ..device_grab import try_grab
 
 
 REMEDIATION = (
@@ -102,9 +103,22 @@ def run(args: argparse.Namespace) -> int:
 
 
 def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
-    """Phase 2 path: no Qt, blocking read loop on the main thread."""
+    """Phase 2 path: no Qt, blocking read loop on the main thread.
+
+    Auto-grabs the device via uinput so bound triggers do not reach
+    focused applications. Falls back to no-grab if try_grab returns None.
+    """
+    from evdev import ecodes
+    swallow_codes = {
+        ecodes.ecodes[b.trigger]
+        for b in cfg.bindings.values()
+        if b.trigger in ecodes.ecodes
+    }
+    virt = try_grab(device)
     try:
-        for event in backend.read_loop(device):
+        for event in backend.read_loop(
+            device, swallow_codes=swallow_codes, virt=virt
+        ):
             dispatch_event(
                 cfg,
                 ring_controller=_NoOpRingController(),
@@ -116,6 +130,13 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     except OSError as exc:
         logging.warning("device read failed: %s", exc)
         return 1
+    finally:
+        if virt is not None:
+            virt.close()
+            try:
+                device.ungrab()
+            except OSError:
+                pass
     return 0
 
 
