@@ -41,9 +41,12 @@ segments = [
 # advertising the capability — verified on the dev hardware via
 # scripts/dump-keys.py. If your hold of BTN_TASK does nothing, run
 # `./scripts/dump-keys.py /dev/input/eventNN` to see what your MX actually
-# emits, and substitute that code below. BTN_SIDE / BTN_EXTRA are common
-# fallbacks; they dual-fire with browser back/forward (no device grabbing
-# in v1) but the ring will still open and fire its segment.
+# emits, and substitute that code below.
+#
+# Bound trigger codes are swallowed by logitechmouse so they do not reach
+# focused applications. If you see double-firing (e.g. browser navigates
+# AND your action runs), see the README "Troubleshooting → buttons fire
+# twice" section — usually a /dev/uinput permission fix.
 [bindings.gesture_button]
 trigger = "BTN_TASK"
 target  = "ring:thumb_ring"

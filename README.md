@@ -62,9 +62,11 @@ The app looks for a TOML config file, defaulting to:
 ~/.config/logitechmouse/config.toml
 ```
 
-See `examples/config.toml` for a working sample. Default examples bind the
-gesture button (`BTN_TASK`) because it has no OS-default action — `BTN_SIDE`
-and `BTN_EXTRA` will double-fire with browser back/forward in this MVP.
+See `examples/config.toml` for a working sample. Bound trigger codes are
+swallowed via a `/dev/uinput` virtual device so they do not reach focused
+applications — `BTN_SIDE` / `BTN_EXTRA` no longer dual-fire with browser
+back/forward when bound. If you do see dual-firing, see
+[Troubleshooting → buttons fire twice](#buttons-fire-twice-your-action-runs-and-the-app-sees-the-click).
 
 ### Rings
 
@@ -119,6 +121,37 @@ LOGITECHMOUSE_THEME=brazil logitechmouse listen
 
 Themes today: `dark` (default), `brazil` (green/yellow/blue, bandeira do Brasil).
 Full theming via config is a polish phase; the env var is the v1 escape hatch.
+
+## Troubleshooting
+
+### Buttons fire twice (your action runs *and* the app sees the click)
+
+`logitechmouse` swallows bound trigger codes via a `/dev/uinput` virtual
+device. If `/dev/uinput` is not writable by your user, the listener falls
+back to non-grab mode (you'll see a warning in the log) and bound buttons
+also reach the focused app.
+
+Fix on most distros — add yourself to a group with write access:
+
+```bash
+# Check who owns /dev/uinput:
+ls -l /dev/uinput
+# crw------- 1 root root ...   -> needs a udev rule (see below)
+# crw-rw---- 1 root input ...  -> just join the group:
+sudo usermod -aG input $USER
+# log out + back in
+```
+
+Or drop a udev rule (works regardless of distro defaults):
+
+```bash
+sudo tee /etc/udev/rules.d/60-logitechmouse-uinput.rules <<'EOF'
+KERNEL=="uinput", GROUP="input", MODE="0660"
+EOF
+sudo udevadm control --reload-rules && sudo udevadm trigger
+```
+
+After the fix, restart the listener and confirm the warning is gone.
 
 ## Documents
 
