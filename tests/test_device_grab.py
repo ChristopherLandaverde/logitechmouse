@@ -159,6 +159,19 @@ def test_try_grab_returns_none_when_real_device_already_grabbed(caplog):
     fake_ui.close.assert_called_once_with()  # virtual device cleaned up
 
 
+def test_try_grab_returns_none_when_capabilities_read_fails(caplog):
+    """If capabilities() raises (device disappeared / disconnect race),
+    try_grab logs a WARNING and returns None without calling grab()."""
+    real = _fake_real_dev()
+    real.capabilities.side_effect = OSError("no such device")
+    with caplog.at_level("WARNING"):
+        v = try_grab(real)
+    assert v is None
+    real.grab.assert_not_called()
+    msg = " ".join(rec.message for rec in caplog.records).lower()
+    assert "fire twice" in msg or "troubleshooting" in msg
+
+
 def test_try_grab_warning_mentions_dual_fire_remediation(caplog):
     """The warning must point users at the docs so the fallback is debuggable."""
     real = _fake_real_dev()
