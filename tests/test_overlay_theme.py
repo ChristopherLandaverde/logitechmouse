@@ -29,9 +29,9 @@ def _reload_widget(theme_value: str | None):
 def test_default_theme_is_dark():
     widget = _reload_widget(None)
     # Dark theme dead zone is near-black.
-    assert widget._theme["dead_zone"].red() == 18
-    assert widget._theme["dead_zone"].green() == 18
-    assert widget._theme["dead_zone"].blue() == 18
+    assert widget._theme["dead_zone"].red() == 6
+    assert widget._theme["dead_zone"].green() == 6
+    assert widget._theme["dead_zone"].blue() == 6
     # center_label is light for legibility on dark background.
     assert widget._theme["center_label"].red() >= 200
 
@@ -55,7 +55,7 @@ def test_brazil_theme_swaps_palette():
 def test_unknown_theme_falls_back_to_dark():
     widget = _reload_widget("nonsense")
     # Falls back to dark theme colors.
-    assert widget._theme["dead_zone"].red() == 18
+    assert widget._theme["dead_zone"].red() == 6
 
 
 @pytest.fixture(autouse=True)

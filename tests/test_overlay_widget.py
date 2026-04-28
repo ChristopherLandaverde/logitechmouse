@@ -37,6 +37,7 @@ def test_widget_can_be_constructed_and_shown(qtbot, fake_ring):
     assert not w.testAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
     assert w.testAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents)
     w.hide()
+    qtbot.wait(80)  # allow 50 ms InCubic fade-out
     assert not w.isVisible()
 
 

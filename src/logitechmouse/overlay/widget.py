@@ -5,8 +5,8 @@ from __future__ import annotations
 import math
 import os
 
-from PyQt6.QtCore import Qt, QPoint, QRect, QRectF, QPropertyAnimation, QEasingCurve
-from PyQt6.QtGui import QColor, QFont, QGuiApplication, QPainter, QPixmap, QRegion
+from PyQt6.QtCore import Qt, QPoint, QPointF, QRect, QRectF, QPropertyAnimation, QEasingCurve
+from PyQt6.QtGui import QBrush, QColor, QFont, QGuiApplication, QPainter, QPen, QPixmap, QRadialGradient, QRegion
 from PyQt6.QtWidgets import QWidget
 
 from ..config import Ring
@@ -26,24 +26,24 @@ RING_DEAD_ZONE_RADIUS = 38
 BUBBLE_ORBIT = 115
 BUBBLE_R = 24
 BUBBLE_R_ACTIVE = 30
-_ICON_SIZE = 15
-_ICON_SIZE_ACTIVE = 19
+_ICON_SIZE = 18
+_ICON_SIZE_ACTIVE = 22
 
 _THEMES: dict[str, dict[str, QColor]] = {
     "dark": {
-        "bubble":        QColor(160, 160, 160, 255),
-        "bubble_active": QColor(235, 235, 235, 255),
-        "dead_zone":     QColor(18, 18, 18, 255),
-        "label":         QColor(30, 30, 30, 255),
-        "label_active":  QColor(10, 10, 10, 255),
-        "cancel":        QColor(130, 130, 130, 255),
-        "center_label":  QColor(230, 230, 230, 255),
+        "bubble":        QColor(32, 32, 32, 255),
+        "bubble_active": QColor(252, 252, 252, 255),
+        "dead_zone":     QColor(6, 6, 6, 255),
+        "label":         QColor(158, 158, 158, 255),
+        "label_active":  QColor(4, 4, 4, 255),
+        "cancel":        QColor(58, 58, 58, 255),
+        "center_label":  QColor(248, 248, 248, 255),
     },
     "brazil": {
-        "bubble":        QColor(160, 160, 160, 255),
+        "bubble":        QColor(32, 32, 32, 255),
         "bubble_active": QColor(255, 223, 0, 255),
         "dead_zone":     QColor(255, 223, 0, 255),
-        "label":         QColor(30, 30, 30, 255),
+        "label":         QColor(158, 158, 158, 255),
         "label_active":  QColor(0, 39, 118, 255),
         "cancel":        QColor(255, 255, 255, 255),
         "center_label":  QColor(0, 39, 118, 255),
@@ -72,6 +72,7 @@ class RingWidget(QWidget):
         self._center_y = 0
         self.active_segment_index = 0
         self._open_animation: QPropertyAnimation | None = None
+        self._close_animation: QPropertyAnimation | None = None
         self.is_in_dead_zone = True
         self._icon_cache: dict[tuple, QPixmap | None] = {}
         self._bubble_offsets: list[tuple[float, float]] = []
@@ -81,9 +82,13 @@ class RingWidget(QWidget):
         self._cancel_font = QFont()
         self._cancel_font.setPointSize(9)
         self._label_font = QFont()
-        self._label_font.setPointSize(8)
+        self._label_font.setPointSize(9)
 
     def show_at(self, ring: Ring, cursor_pos: tuple[int, int]) -> None:
+        if self._close_animation is not None:
+            self._close_animation.stop()
+            self._close_animation = None
+
         if ring is not self._ring:
             self._icon_cache.clear()
             n = len(ring.segments)
@@ -143,6 +148,22 @@ class RingWidget(QWidget):
         self.is_in_dead_zone = new_dead
         self.update()
 
+    def hide(self) -> None:  # noqa: A003
+        if self._close_animation is not None:
+            self._close_animation.stop()
+        anim = QPropertyAnimation(self, b"windowOpacity", self)
+        anim.setDuration(50)
+        anim.setStartValue(self.windowOpacity())
+        anim.setEndValue(0.0)
+        anim.setEasingCurve(QEasingCurve.Type.InCubic)
+        anim.finished.connect(self._finish_hide)
+        anim.start()
+        self._close_animation = anim
+
+    def _finish_hide(self) -> None:
+        self._close_animation = None
+        QWidget.hide(self)
+
     def _build_mask(self, ring: Ring, size: int) -> QRegion:
         ox = size / 2.0
         oy = size / 2.0
@@ -186,10 +207,17 @@ class RingWidget(QWidget):
             is_active = i == self.active_segment_index and not self.is_in_dead_zone
             r = float(BUBBLE_R_ACTIVE if is_active else BUBBLE_R)
 
+            grad_back = QRadialGradient(QPointF(bx, by), _backdrop_r)
+            grad_back.setColorAt(0.0, QColor(20, 20, 20))
+            grad_back.setColorAt(1.0, QColor(3, 3, 3))
             p.setPen(Qt.PenStyle.NoPen)
-            p.setBrush(_theme["dead_zone"])
+            p.setBrush(QBrush(grad_back))
             p.drawEllipse(QRectF(bx - _backdrop_r, by - _backdrop_r, _backdrop_r * 2.0, _backdrop_r * 2.0))
 
+            if is_active:
+                p.setPen(Qt.PenStyle.NoPen)
+            else:
+                p.setPen(QPen(QColor(255, 255, 255, 35), 0.8))
             p.setBrush(_theme["bubble_active"] if is_active else _theme["bubble"])
             p.drawEllipse(QRectF(bx - r, by - r, r * 2.0, r * 2.0))
 
@@ -205,15 +233,20 @@ class RingWidget(QWidget):
                 fm = p.fontMetrics()
                 p.drawText(int(bx - fm.horizontalAdvance(monogram) / 2), int(by + fm.height() / 4), monogram)
 
+        grad_dz = QRadialGradient(QPointF(ox, oy), RING_DEAD_ZONE_RADIUS)
+        grad_dz.setColorAt(0.0, QColor(18, 18, 18))
+        grad_dz.setColorAt(0.8, QColor(6, 6, 6))
+        grad_dz.setColorAt(1.0, QColor(2, 2, 2))
         p.setPen(Qt.PenStyle.NoPen)
-        p.setBrush(_theme["dead_zone"])
-        p.drawEllipse(QRectF(ox - RING_DEAD_ZONE_RADIUS, oy - RING_DEAD_ZONE_RADIUS, RING_DEAD_ZONE_RADIUS * 2.0, RING_DEAD_ZONE_RADIUS * 2.0))
+        p.setBrush(QBrush(grad_dz))
+        p.drawEllipse(QRectF(ox - RING_DEAD_ZONE_RADIUS, oy - RING_DEAD_ZONE_RADIUS,
+                      RING_DEAD_ZONE_RADIUS * 2.0, RING_DEAD_ZONE_RADIUS * 2.0))
 
         if self.is_in_dead_zone:
             p.setFont(self._cancel_font)
             p.setPen(_theme["cancel"])
             fm = p.fontMetrics()
-            p.drawText(int(ox - fm.horizontalAdvance("X") / 2), int(oy + fm.height() / 4), "X")
+            p.drawText(int(ox - fm.horizontalAdvance("×") / 2), int(oy + fm.height() / 4), "×")
         elif self._ring is not None:
             label = self._ring.segments[self.active_segment_index].label or ""
             p.setFont(self._label_font)
