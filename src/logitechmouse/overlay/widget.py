@@ -179,6 +179,7 @@ class RingWidget(QWidget):
         ox = self.width() / 2.0
         oy = self.height() / 2.0
 
+        _backdrop_r = float(BUBBLE_R_ACTIVE + 4)  # matches mask boundary
         for i, (dx_off, dy_off) in enumerate(self._bubble_offsets):
             bx = ox + dx_off
             by = oy + dy_off
@@ -186,6 +187,9 @@ class RingWidget(QWidget):
             r = float(BUBBLE_R_ACTIVE if is_active else BUBBLE_R)
 
             p.setPen(Qt.PenStyle.NoPen)
+            p.setBrush(_theme["dead_zone"])
+            p.drawEllipse(QRectF(bx - _backdrop_r, by - _backdrop_r, _backdrop_r * 2.0, _backdrop_r * 2.0))
+
             p.setBrush(_theme["bubble_active"] if is_active else _theme["bubble"])
             p.drawEllipse(QRectF(bx - r, by - r, r * 2.0, r * 2.0))
 
