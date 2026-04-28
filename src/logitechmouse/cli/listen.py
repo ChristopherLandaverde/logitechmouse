@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 import signal
+import socket
 import sys
 from contextlib import contextmanager
 from typing import Callable
@@ -268,12 +269,55 @@ def _run_with_qt(cfg: AppConfig, backend: EvdevBackend, device) -> int:
         bridge.on_event, Qt.ConnectionType.QueuedConnection
     )
     worker.finished.connect(_on_finished, Qt.ConnectionType.QueuedConnection)
+    from PyQt6.QtCore import QSocketNotifier
+
+    r_sock, w_sock = socket.socketpair(socket.AF_UNIX, socket.SOCK_STREAM)
+    r_sock.setblocking(False)
+    w_sock.setblocking(False)
+
+    _wakeup_active = False
+    prev_wakeup_fd = -1
+    prev_sigterm = signal.getsignal(signal.SIGTERM)
+    prev_sigint = signal.getsignal(signal.SIGINT)
+    notifier = None
+
+    try:
+        prev_wakeup_fd = signal.set_wakeup_fd(w_sock.fileno())
+        _wakeup_active = True
+    except ValueError as exc:
+        logging.warning(
+            "set_wakeup_fd unavailable: %s; SIGTERM will hard-kill the Qt path", exc
+        )
+        r_sock.close()
+        w_sock.close()
+
+    if _wakeup_active:
+        signal.signal(signal.SIGTERM, lambda s, f: None)
+        signal.signal(signal.SIGINT, lambda s, f: None)
+        notifier = QSocketNotifier(r_sock.fileno(), QSocketNotifier.Type.Read)
+
+        def _on_signal_wakeup():
+            try:
+                r_sock.recv(256)
+            except OSError:
+                pass
+            app.quit()
+
+        notifier.activated.connect(_on_signal_wakeup)
+
     thread.start()
 
     try:
         app.exec()
         thread.wait(2000)
     finally:
+        if _wakeup_active:
+            notifier.setEnabled(False)
+            signal.set_wakeup_fd(prev_wakeup_fd)
+            signal.signal(signal.SIGTERM, prev_sigterm)
+            signal.signal(signal.SIGINT, prev_sigint)
+            r_sock.close()
+            w_sock.close()
         if virt is not None:
             try:
                 virt.close()
