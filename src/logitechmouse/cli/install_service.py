@@ -17,7 +17,7 @@ StartLimitBurst=5
 [Service]
 ExecStart={exec_start} --config {config_path} listen
 PassEnvironment=DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XAUTHORITY
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]

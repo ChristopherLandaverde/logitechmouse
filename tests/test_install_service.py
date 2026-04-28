@@ -34,7 +34,7 @@ def test_happy_path_writes_unit_file(tmp_path):
     assert "/usr/local/bin/logitechmouse" in content
     assert str(config.resolve()) in content
     assert "listen" in content and str(config.resolve()) in content
-    assert "Restart=on-failure" in content
+    assert "Restart=always" in content
 
 
 def test_happy_path_runs_daemon_reload(tmp_path):
