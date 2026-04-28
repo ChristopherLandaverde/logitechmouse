@@ -2,7 +2,9 @@ from __future__ import annotations
 
 import argparse
 import logging
+import signal
 import sys
+from contextlib import contextmanager
 from typing import Callable
 
 from ..actions import run_action as _default_run_action
@@ -13,6 +15,26 @@ from ..device import (
     EvdevBackend,
 )
 from ..device_grab import try_grab
+
+
+@contextmanager
+def _sigterm_raises_keyboard_interrupt():
+    """Map SIGTERM to KeyboardInterrupt for the duration of the block.
+
+    Both listener paths already exit cleanly on KeyboardInterrupt (the
+    `finally` runs and the read loop ends), so re-using the same path
+    keeps the teardown in one place.
+    """
+    previous = signal.getsignal(signal.SIGTERM)
+
+    def _raise(signum, frame):
+        raise KeyboardInterrupt
+
+    signal.signal(signal.SIGTERM, _raise)
+    try:
+        yield
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 REMEDIATION = (
@@ -120,17 +142,20 @@ def _run_command_only(cfg: AppConfig, backend: EvdevBackend, device) -> int:
     swallow_codes = _build_swallow_codes(cfg)
     virt = try_grab(device)
     try:
-        for event in backend.read_loop(
-            device, swallow_codes=swallow_codes, virt=virt
-        ):
-            dispatch_event(
-                cfg,
-                ring_controller=_NoOpRingController(),
-                run_action=_default_run_action,
-                trigger=event.trigger,
-                pressed=event.pressed,
-                cursor_pos=(0, 0),
-            )
+        with _sigterm_raises_keyboard_interrupt():
+            for event in backend.read_loop(
+                device, swallow_codes=swallow_codes, virt=virt
+            ):
+                dispatch_event(
+                    cfg,
+                    ring_controller=_NoOpRingController(),
+                    run_action=_default_run_action,
+                    trigger=event.trigger,
+                    pressed=event.pressed,
+                    cursor_pos=(0, 0),
+                )
+    except KeyboardInterrupt:
+        logging.info("listener stopped")
     except OSError as exc:
         logging.warning("device read failed: %s", exc)
         return 1

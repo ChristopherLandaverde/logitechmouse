@@ -1,4 +1,5 @@
 import argparse
+import signal
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -110,6 +111,31 @@ def test_command_only_path_virt_close_failure_still_ungrabs(cmd_only_config):
     assert rc == 0
     fake_virt.close.assert_called_once_with()
     fake_dev.ungrab.assert_called_once_with()
+
+
+def test_command_only_path_installs_sigterm_handler_and_restores_it(cmd_only_config):
+    """run() must install a SIGTERM handler before entering the loop and
+    restore the previous handler on exit."""
+    args = argparse.Namespace(config=cmd_only_config, device=None)
+    fake_dev = MagicMock(path="/dev/input/event99", name="fake")
+
+    sentinel = signal.getsignal(signal.SIGTERM)
+
+    captured = {}
+
+    def stub_read_loop(device, swallow_codes=None, virt=None):
+        captured["installed_handler"] = signal.getsignal(signal.SIGTERM)
+        return iter([])
+
+    with patch.object(listen_mod.EvdevBackend, "resolve", return_value=fake_dev), \
+         patch.object(listen_mod.EvdevBackend, "read_loop", side_effect=stub_read_loop), \
+         patch("logitechmouse.cli.listen.try_grab", return_value=None):
+        listen_mod.run(args)
+
+    assert captured["installed_handler"] is not sentinel, \
+        "SIGTERM handler must be installed during the read loop"
+    assert signal.getsignal(signal.SIGTERM) is sentinel, \
+        "SIGTERM handler must be restored after run() returns"
 
 
 @pytest.fixture
