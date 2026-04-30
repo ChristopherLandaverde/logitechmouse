@@ -81,6 +81,7 @@ def test_action_delete_force_removes_segments(tmp_path):
             Segment(action="shot", label="A"),
             Segment(action="other", label="B"),
             Segment(action="other", label="C"),
+            Segment(action="other", label="D"),
         ])},
     ))
     from logitechmouse.cli.action import run_action_delete
@@ -89,3 +90,22 @@ def test_action_delete_force_removes_segments(tmp_path):
     assert "shot" not in r.actions
     for ring in r.rings.values():
         assert all(seg.action != "shot" for seg in ring.segments)
+
+def test_action_delete_force_blocked_when_ring_drops_below_min(tmp_path, capsys):
+    p = tmp_path / "config.toml"
+    write_config(p, AppConfig(
+        actions={
+            "shot": Action(name="shot", kind="command", command="true"),
+            "other": Action(name="other", kind="command", command="true"),
+        },
+        rings={"main": Ring(name="main", segments=[
+            Segment(action="shot", label="A"),
+            Segment(action="other", label="B"),
+            Segment(action="other", label="C"),
+        ])},
+    ))
+    from logitechmouse.cli.action import run_action_delete
+    rc = run_action_delete(_args(p, name="shot", force=True))
+    assert rc == 1
+    err = capsys.readouterr().err
+    assert "main" in err and "3" in err

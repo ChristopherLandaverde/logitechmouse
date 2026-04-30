@@ -5,7 +5,7 @@ import difflib
 import sys
 from pathlib import Path
 
-from ..config import DEFAULT_CONFIG_PATH, Action, load_config
+from ..config import DEFAULT_CONFIG_PATH, Action, ConfigError, load_config, validate_config
 from ..config_writer import write_config
 
 
@@ -31,6 +31,11 @@ def run_action_create(args: argparse.Namespace) -> int:
         print(f"Error: action '{args.name}' already exists.", file=sys.stderr)
         return 1
     cfg.actions[args.name] = Action(name=args.name, kind="command", command=args.command)
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Created action '{args.name}'.")
     return 0
@@ -68,6 +73,16 @@ def run_action_delete(args: argparse.Namespace) -> int:
         return 1
     if args.force:
         for ring in cfg.rings.values():
+            remaining = [s for s in ring.segments if s.action != args.name]
+            if len(ring.segments) != len(remaining) and len(remaining) < 3:
+                print(
+                    f"Error: deleting action '{args.name}' would leave ring '{ring.name}' "
+                    f"with {len(remaining)} segment(s) (minimum is 3). "
+                    f"Delete the ring first with: logitechmouse ring delete {ring.name}",
+                    file=sys.stderr,
+                )
+                return 1
+        for ring in cfg.rings.values():
             ring.segments = [s for s in ring.segments if s.action != args.name]
         cfg.bindings = {
             n: b for n, b in cfg.bindings.items()
@@ -79,6 +94,11 @@ def run_action_delete(args: argparse.Namespace) -> int:
                 if not (b.target.kind == "action" and b.target.name == args.name)
             }
     del cfg.actions[args.name]
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Deleted action '{args.name}'.")
     return 0

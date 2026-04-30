@@ -8,7 +8,8 @@ from pathlib import Path
 from evdev import ecodes
 
 from ..config import (
-    DEFAULT_CONFIG_PATH, Binding, ConfigError, Profile, load_config, parse_target_string,
+    DEFAULT_CONFIG_PATH, Binding, ConfigError, Profile, load_config,
+    parse_target_string, validate_config,
 )
 from ..config_writer import write_config
 
@@ -35,6 +36,11 @@ def run_profile_create(args: argparse.Namespace) -> int:
         print(f"Error: profile '{args.name}' already exists.", file=sys.stderr)
         return 1
     cfg.profiles[args.name] = Profile(name=args.name, match_wm_class=args.match)
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Created profile '{args.name}'.")
     return 0
@@ -49,6 +55,11 @@ def run_profile_delete(args: argparse.Namespace) -> int:
         print(f"Error: profile '{args.name}' not found.{hint}", file=sys.stderr)
         return 1
     del cfg.profiles[args.name]
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Deleted profile '{args.name}'.")
     return 0
@@ -76,6 +87,11 @@ def run_binding_set(args: argparse.Namespace) -> int:
     profile.bindings[binding_name] = Binding(
         name=binding_name, trigger=args.trigger, target=target,
     )
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Set binding '{args.trigger}' → '{args.target}' on profile '{args.profile}'.")
     return 0
@@ -98,6 +114,11 @@ def run_binding_remove(args: argparse.Namespace) -> int:
         )
         return 1
     del profile.bindings[match]
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Removed binding '{args.trigger}' from profile '{args.profile}'.")
     return 0

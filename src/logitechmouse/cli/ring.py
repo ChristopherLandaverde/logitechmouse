@@ -5,7 +5,7 @@ import difflib
 import sys
 from pathlib import Path
 
-from ..config import DEFAULT_CONFIG_PATH, Ring, Segment, load_config
+from ..config import DEFAULT_CONFIG_PATH, ConfigError, Ring, Segment, load_config, validate_config
 from ..config_writer import write_config
 
 
@@ -87,6 +87,11 @@ def run_ring_delete(args: argparse.Namespace) -> int:
                 if not (b.target.kind == "ring" and b.target.name == args.name)
             }
     del cfg.rings[args.name]
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Deleted ring '{args.name}'.")
     return 0
@@ -144,6 +149,11 @@ def run_segment_remove(args: argparse.Namespace) -> int:
         print(f"Error: ring '{args.ring}' already has the minimum 3 segments.", file=sys.stderr)
         return 1
     removed = ring.segments.pop(pos)
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Removed segment '{removed.label}' from ring '{args.ring}'.")
     return 0
@@ -166,6 +176,11 @@ def run_segment_move(args: argparse.Namespace) -> int:
         return 1
     seg = ring.segments.pop(frm)
     ring.segments.insert(to, seg)
+    try:
+        validate_config(cfg)
+    except ConfigError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 1
     write_config(path, cfg)
     print(f"Moved segment to position {args.to} in ring '{args.ring}'.")
     return 0

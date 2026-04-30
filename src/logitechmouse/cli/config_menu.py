@@ -21,6 +21,9 @@ def _menu_action(path: Path) -> None:
             print(f"  {name}: {a.command}")
     elif op == "Create":
         name = questionary.text("Action name:").ask()
+        if name in cfg.actions:
+            print(f"Error: action '{name}' already exists.")
+            return
         command = questionary.text("Shell command:").ask()
         cfg.actions[name] = Action(name=name, kind="command", command=command)
         write_config(path, cfg)
@@ -43,17 +46,35 @@ def _menu_ring(path: Path) -> None:
             print(f"  {name}: {len(r.segments)} segments")
     elif op == "Create":
         name = questionary.text("Ring name:").ask()
+        if name in cfg.rings:
+            print(f"Error: ring '{name}' already exists.")
+            return
         cfg.rings[name] = Ring(name=name, segments=[])
         write_config(path, cfg)
         print(f"Created ring '{name}'.")
     elif op == "Delete":
         name = questionary.text("Ring name to delete:").ask()
-        if name in cfg.rings:
-            del cfg.rings[name]
-            write_config(path, cfg)
-            print(f"Deleted ring '{name}'.")
-        else:
+        if name not in cfg.rings:
             print(f"Ring '{name}' not found.")
+            return
+        broken = [
+            b.name for b in cfg.bindings.values()
+            if b.target.kind == "ring" and b.target.name == name
+        ] + [
+            f"{p.name}/{b.name}"
+            for p in cfg.profiles.values()
+            for b in p.bindings.values()
+            if b.target.kind == "ring" and b.target.name == name
+        ]
+        if broken:
+            print(
+                f"Error: ring '{name}' is referenced by bindings: {', '.join(broken)}. "
+                f"Remove those bindings first or use the CLI with --force."
+            )
+            return
+        del cfg.rings[name]
+        write_config(path, cfg)
+        print(f"Deleted ring '{name}'.")
 
 
 def _menu_profile(path: Path) -> None:
@@ -64,6 +85,9 @@ def _menu_profile(path: Path) -> None:
             print(f"  {name}: match={pr.match_wm_class}")
     elif op == "Create":
         name = questionary.text("Profile name:").ask()
+        if name in cfg.profiles:
+            print(f"Error: profile '{name}' already exists.")
+            return
         match = questionary.text("WM class to match (e.g. Firefox):").ask()
         cfg.profiles[name] = Profile(name=name, match_wm_class=match)
         write_config(path, cfg)
