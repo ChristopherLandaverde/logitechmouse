@@ -1,6 +1,26 @@
 from logitechmouse.main import build_parser
 
 
+def test_parser_ring_list():
+    args = build_parser().parse_args(["ring", "list"])
+    assert args.command == "ring" and args.ring_command == "list"
+
+
+def test_parser_action_list():
+    args = build_parser().parse_args(["action", "list"])
+    assert args.command == "action" and args.action_command == "list"
+
+
+def test_parser_profile_list():
+    args = build_parser().parse_args(["profile", "list"])
+    assert args.command == "profile" and args.profile_command == "list"
+
+
+def test_parser_config():
+    args = build_parser().parse_args(["config"])
+    assert args.command == "config"
+
+
 def test_listen_accepts_device_override():
     parser = build_parser()
     args = parser.parse_args(["listen", "--device", "/dev/input/event25"])

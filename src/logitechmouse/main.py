@@ -60,6 +60,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Overwrite an existing unit file",
     )
 
+    from .cli.ring import register as _reg_ring
+    from .cli.action import register as _reg_action
+    from .cli.profile import register as _reg_profile
+    _reg_ring(sub)
+    _reg_action(sub)
+    _reg_profile(sub)
+    sub.add_parser("config", help="Interactive configuration menu")
+
     return parser
 
 
@@ -80,6 +88,14 @@ def main() -> int:
         from .cli.run import run as run_cmd
     elif args.command == "install-service":
         from .cli.install_service import run as run_cmd
+    elif args.command == "ring":
+        from .cli.ring import run as run_cmd
+    elif args.command == "action":
+        from .cli.action import run as run_cmd
+    elif args.command == "profile":
+        from .cli.profile import run as run_cmd
+    elif args.command == "config":
+        from .cli.config_menu import run as run_cmd
     else:
         parser.error(f"unknown command: {args.command}")
 
