@@ -28,6 +28,7 @@ classifiers = [
 dependencies = [
   "evdev>=1.6",
   "tomli-w>=1.0",
+  "questionary>=2.0",
 ]
 
 [project.urls]
