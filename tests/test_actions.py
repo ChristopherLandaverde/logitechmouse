@@ -1,5 +1,6 @@
 import time
 
+from logitechmouse import actions as actions_mod
 from logitechmouse.actions import run_action
 from logitechmouse.config import Action
 
@@ -30,6 +31,20 @@ def test_spawn_failure_is_caught():
     result = run_action(action)
     assert result.ok is False
     assert "failed to spawn" in result.detail
+
+
+def test_systemd_run_wrapper_falls_back_when_scope_probe_fails(monkeypatch):
+    actions_mod._systemd_run_scope_available.cache_clear()
+    monkeypatch.setattr(actions_mod.shutil, "which", lambda name: "/usr/bin/systemd-run")
+    monkeypatch.setattr(actions_mod, "_user_bus_available", lambda: True)
+
+    class Result:
+        returncode = 1
+
+    monkeypatch.setattr(actions_mod.subprocess, "run", lambda *args, **kwargs: Result())
+
+    assert actions_mod._in_own_cgroup(["/bin/true"]) == ["/bin/true"]
+    actions_mod._systemd_run_scope_available.cache_clear()
 
 
 def test_successful_spawn_does_not_block(tmp_path):
