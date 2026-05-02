@@ -4,6 +4,7 @@ from unittest.mock import patch
 import pytest
 
 from logitechmouse.cli import listen as listen_mod
+from logitechmouse.device import DeviceNotFoundError
 
 
 def test_listen_returns_error_when_config_has_no_bindings(tmp_path, caplog):
@@ -30,6 +31,46 @@ def test_listen_returns_error_when_config_has_no_bindings(tmp_path, caplog):
     assert any(
         "binding" in rec.message.lower() for rec in caplog.records
     ), f"expected an error mentioning bindings, got: {[r.message for r in caplog.records]}"
+
+
+def test_listen_retries_device_discovery_when_requested(tmp_path, caplog):
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        '[actions.a]\n'
+        'type = "command"\n'
+        'command = "true"\n'
+        '\n'
+        '[bindings.g]\n'
+        'trigger = "BTN_SIDE"\n'
+        'target = "action:a"\n'
+    )
+    args = argparse.Namespace(
+        config=cfg_path,
+        device=None,
+        retry_device=True,
+        retry_interval=0,
+    )
+    fake_device = type("FakeDev", (), {"path": "/fake", "name": "Fake"})()
+
+    with patch.object(
+        listen_mod,
+        "_resolve_device",
+        side_effect=[DeviceNotFoundError("not yet"), fake_device],
+    ), patch.object(
+        listen_mod.EvdevBackend,
+        "read_loop",
+        return_value=iter(()),
+    ), patch(
+        "logitechmouse.cli.listen.try_grab",
+        return_value=None,
+    ), patch(
+        "logitechmouse.cli.listen.time.sleep",
+    ) as sleep, caplog.at_level("WARNING"):
+        rc = listen_mod.run(args)
+
+    assert rc == 0
+    sleep.assert_called_once_with(0.1)
+    assert any("retrying device discovery" in rec.message for rec in caplog.records)
 
 
 from unittest.mock import MagicMock

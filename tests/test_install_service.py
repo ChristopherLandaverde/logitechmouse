@@ -33,7 +33,7 @@ def test_happy_path_writes_unit_file(tmp_path):
     content = unit.read_text()
     assert "/usr/local/bin/logitechmouse" in content
     assert str(config.resolve()) in content
-    assert "listen" in content and str(config.resolve()) in content
+    assert "listen --retry-device --retry-interval 5" in content
     assert "Restart=always" in content
 
 

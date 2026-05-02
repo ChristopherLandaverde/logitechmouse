@@ -32,6 +32,17 @@ def build_parser() -> argparse.ArgumentParser:
     p_listen.add_argument(
         "--device", default=None, help="Override [device].path with this event node"
     )
+    p_listen.add_argument(
+        "--retry-device",
+        action="store_true",
+        help="Keep waiting when the mouse device is not present yet",
+    )
+    p_listen.add_argument(
+        "--retry-interval",
+        type=float,
+        default=5.0,
+        help="Seconds between device discovery retries when --retry-device is set",
+    )
 
     p_devices = sub.add_parser("devices", help="List detected input devices")
 

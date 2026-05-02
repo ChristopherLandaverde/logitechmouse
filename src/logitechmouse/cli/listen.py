@@ -5,6 +5,7 @@ import logging
 import signal
 import socket
 import sys
+import time
 from contextlib import contextmanager
 from typing import Callable
 
@@ -122,6 +123,36 @@ def _build_swallow_codes(cfg: AppConfig) -> set[int]:
     }
 
 
+def _resolve_device(backend: EvdevBackend, cfg: AppConfig, triggers: set[str] | None):
+    return backend.resolve(cfg.device, triggers=triggers)
+
+
+def _resolve_device_for_listener(
+    backend: EvdevBackend,
+    cfg: AppConfig,
+    triggers: set[str] | None,
+    *,
+    retry: bool,
+    retry_interval: float,
+):
+    while True:
+        try:
+            return _resolve_device(backend, cfg, triggers)
+        except DeviceUnreadableError as exc:
+            logging.error("%s\n%s", exc, REMEDIATION)
+            return None
+        except DeviceNotFoundError as exc:
+            if not retry:
+                logging.error("%s", exc)
+                return None
+            logging.warning(
+                "%s; waiting %.1fs before retrying device discovery",
+                exc,
+                retry_interval,
+            )
+            time.sleep(retry_interval)
+
+
 def run(args: argparse.Namespace) -> int:
     try:
         cfg = load_config(args.config)
@@ -142,14 +173,18 @@ def run(args: argparse.Namespace) -> int:
 
     triggers = {b.trigger for b in cfg.bindings.values()} or None
 
+    retry_device = bool(getattr(args, "retry_device", False))
+    retry_interval = max(0.1, float(getattr(args, "retry_interval", 5.0)))
+
     backend = EvdevBackend()
-    try:
-        device = backend.resolve(cfg.device, triggers=triggers)
-    except DeviceUnreadableError as exc:
-        logging.error("%s\n%s", exc, REMEDIATION)
-        return 1
-    except DeviceNotFoundError as exc:
-        logging.error("%s", exc)
+    device = _resolve_device_for_listener(
+        backend,
+        cfg,
+        triggers,
+        retry=retry_device,
+        retry_interval=retry_interval,
+    )
+    if device is None:
         return 1
 
     summary = ", ".join(

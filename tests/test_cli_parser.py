@@ -32,6 +32,17 @@ def test_listen_device_defaults_to_none():
     parser = build_parser()
     args = parser.parse_args(["listen"])
     assert args.device is None
+    assert args.retry_device is False
+    assert args.retry_interval == 5.0
+
+
+def test_listen_accepts_device_retry_options():
+    parser = build_parser()
+    args = parser.parse_args(
+        ["listen", "--retry-device", "--retry-interval", "1.5"]
+    )
+    assert args.retry_device is True
+    assert args.retry_interval == 1.5
 
 
 def test_check_config_accepts_device_override():

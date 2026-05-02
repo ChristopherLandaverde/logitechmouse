@@ -15,7 +15,7 @@ StartLimitIntervalSec=60
 StartLimitBurst=5
 
 [Service]
-ExecStart={exec_start} --config {config_path} listen
+ExecStart={exec_start} --config {config_path} listen --retry-device --retry-interval 5
 PassEnvironment=DISPLAY WAYLAND_DISPLAY DBUS_SESSION_BUS_ADDRESS XAUTHORITY
 Restart=always
 RestartSec=5
